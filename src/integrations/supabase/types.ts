@@ -14,13 +14,122 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      admin_emails: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          email: string
+          id: string
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          email: string
+          id?: string
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      employees: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          email: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      kpi_data: {
+        Row: {
+          added_by: string | null
+          calls: number | null
+          created_at: string
+          date: string
+          employee_id: string | null
+          id: string
+          in_house_meetings: number | null
+          leads_generated: number | null
+          margin: number | null
+          out_house_meetings: number | null
+          product_knowledge: number | null
+          smd: number | null
+          solo_closing: number | null
+          updated_at: string
+        }
+        Insert: {
+          added_by?: string | null
+          calls?: number | null
+          created_at?: string
+          date: string
+          employee_id?: string | null
+          id?: string
+          in_house_meetings?: number | null
+          leads_generated?: number | null
+          margin?: number | null
+          out_house_meetings?: number | null
+          product_knowledge?: number | null
+          smd?: number | null
+          solo_closing?: number | null
+          updated_at?: string
+        }
+        Update: {
+          added_by?: string | null
+          calls?: number | null
+          created_at?: string
+          date?: string
+          employee_id?: string | null
+          id?: string
+          in_house_meetings?: number | null
+          leads_generated?: number | null
+          margin?: number | null
+          out_house_meetings?: number | null
+          product_knowledge?: number | null
+          smd?: number | null
+          solo_closing?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "kpi_data_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_admin: {
+        Args: { user_email: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
