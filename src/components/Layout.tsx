@@ -1,9 +1,14 @@
-import { Link, useLocation } from "react-router-dom";
-import { BarChart3, Home, Settings, Users } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { BarChart3, Home, Settings, Users, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, isAdmin, signOut } = useAuth();
+  const { toast } = useToast();
 
   const navigation = [
     { name: "Home", href: "/", icon: Home },
@@ -40,9 +45,48 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               })}
             </nav>
 
-            <Button variant="outline" size="sm">
-              Sign In
-            </Button>
+            {user ? (
+              <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 text-sm">
+                  <User className="h-4 w-4" />
+                  <span className="text-muted-foreground">{user.email}</span>
+                  {isAdmin && (
+                    <span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs">Admin</span>
+                  )}
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await signOut();
+                      navigate('/auth');
+                      toast({
+                        title: "Signed out",
+                        description: "You have been successfully signed out.",
+                      });
+                    } catch (error) {
+                      toast({
+                        title: "Sign out failed",
+                        description: "Failed to sign out. Please try again.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </Button>
+              </div>
+            ) : (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => navigate('/auth')}
+              >
+                Sign In
+              </Button>
+            )}
           </div>
         </div>
       </header>
