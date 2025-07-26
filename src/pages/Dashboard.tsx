@@ -9,13 +9,13 @@ import { useKPIData } from "@/hooks/useKPIData";
 import { useState, useMemo } from "react";
 
 const Dashboard = () => {
-  const [selectedEmployee, setSelectedEmployee] = useState<string>("");
+  const [selectedEmployee, setSelectedEmployee] = useState<string>("all");
   const [selectedMonth, setSelectedMonth] = useState<string>(new Date().getMonth() + 1 + "");
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear() + "");
 
   const { data: employees = [] } = useEmployees();
   const { data: kpiData = [], isLoading } = useKPIData({
-    employeeId: selectedEmployee || undefined,
+    employeeId: selectedEmployee === "all" ? undefined : selectedEmployee,
     month: selectedMonth,
     year: selectedYear,
   });
@@ -135,7 +135,7 @@ const Dashboard = () => {
                     <SelectValue placeholder="All Employees" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Employees</SelectItem>
+                    <SelectItem value="all">All Employees</SelectItem>
                     {employees.map((employee) => (
                       <SelectItem key={employee.id} value={employee.id}>
                         {employee.name}
