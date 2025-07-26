@@ -5,29 +5,149 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Users, BarChart3 } from "lucide-react";
+import { Plus, Users, BarChart3, Settings } from "lucide-react";
 import { useState } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { useEmployees, useAddEmployee } from "@/hooks/useEmployees";
+import { useKPIData, useAddKPIData } from "@/hooks/useKPIData";
+import { useAdminEmails, useAddAdminEmail } from "@/hooks/useAdminEmails";
 
 const ManageKPIs = () => {
+  // Employee form state
+  const [employeeName, setEmployeeName] = useState("");
+  const [employeeEmail, setEmployeeEmail] = useState("");
+  
+  // KPI form state
   const [selectedEmployee, setSelectedEmployee] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState("July");
-  const [selectedDay, setSelectedDay] = useState("23");
-  const { toast } = useToast();
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1 + "");
+  const [selectedDay, setSelectedDay] = useState(new Date().getDate() + "");
+  const [kpiValues, setKpiValues] = useState({
+    margin: "",
+    calls: "",
+    leads_generated: "",
+    solo_closing: "",
+    out_house_meetings: "",
+    in_house_meetings: "",
+    product_knowledge: "",
+    smd: "",
+  });
 
-  const handleSaveKPIData = () => {
-    toast({
-      title: "KPI Data Saved",
-      description: "Daily KPI data has been successfully saved.",
-    });
+  // Admin email form state
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+
+  // Hooks
+  const { data: employees = [] } = useEmployees();
+  const { data: adminEmails = [] } = useAdminEmails();
+  const addEmployee = useAddEmployee();
+  const addKPIData = useAddKPIData();
+  const addAdminEmail = useAddAdminEmail();
+
+  const currentYear = new Date().getFullYear();
+  const selectedDate = `${currentYear}-${selectedMonth.padStart(2, '0')}-${selectedDay.padStart(2, '0')}`;
+
+  const { data: existingKPIData } = useKPIData({
+    employeeId: selectedEmployee,
+    month: selectedMonth,
+    year: currentYear.toString(),
+  });
+
+  const dayData = existingKPIData?.find(data => data.date === selectedDate);
+
+  const handleAddEmployee = async () => {
+    if (!employeeName.trim() || !employeeEmail.trim()) {
+      return;
+    }
+    
+    try {
+      await addEmployee.mutateAsync({
+        name: employeeName.trim(),
+        email: employeeEmail.trim(),
+      });
+      setEmployeeName("");
+      setEmployeeEmail("");
+    } catch (error) {
+      // Error handling is done in the hook
+    }
   };
 
-  const handleAddEmployee = () => {
-    toast({
-      title: "Employee Added",
-      description: "New employee has been added to the system.",
-    });
+  const handleSaveKPIData = async () => {
+    if (!selectedEmployee) {
+      return;
+    }
+
+    try {
+      await addKPIData.mutateAsync({
+        employee_id: selectedEmployee,
+        date: selectedDate,
+        margin: parseFloat(kpiValues.margin) || 0,
+        calls: parseInt(kpiValues.calls) || 0,
+        leads_generated: parseInt(kpiValues.leads_generated) || 0,
+        solo_closing: parseInt(kpiValues.solo_closing) || 0,
+        out_house_meetings: parseInt(kpiValues.out_house_meetings) || 0,
+        in_house_meetings: parseInt(kpiValues.in_house_meetings) || 0,
+        product_knowledge: parseFloat(kpiValues.product_knowledge) || 0,
+        smd: parseFloat(kpiValues.smd) || 0,
+      });
+      
+      // Reset form
+      setKpiValues({
+        margin: "",
+        calls: "",
+        leads_generated: "",
+        solo_closing: "",
+        out_house_meetings: "",
+        in_house_meetings: "",
+        product_knowledge: "",
+        smd: "",
+      });
+    } catch (error) {
+      // Error handling is done in the hook
+    }
   };
+
+  const handleAddAdmin = async () => {
+    if (!newAdminEmail.trim()) {
+      return;
+    }
+
+    try {
+      await addAdminEmail.mutateAsync({
+        email: newAdminEmail.trim(),
+      });
+      setNewAdminEmail("");
+    } catch (error) {
+      // Error handling is done in the hook
+    }
+  };
+
+  const handleLoadExistingData = () => {
+    if (dayData) {
+      setKpiValues({
+        margin: dayData.margin?.toString() || "",
+        calls: dayData.calls?.toString() || "",
+        leads_generated: dayData.leads_generated?.toString() || "",
+        solo_closing: dayData.solo_closing?.toString() || "",
+        out_house_meetings: dayData.out_house_meetings?.toString() || "",
+        in_house_meetings: dayData.in_house_meetings?.toString() || "",
+        product_knowledge: dayData.product_knowledge?.toString() || "",
+        smd: dayData.smd?.toString() || "",
+      });
+    }
+  };
+
+  const months = [
+    { value: "1", label: "January" },
+    { value: "2", label: "February" },
+    { value: "3", label: "March" },
+    { value: "4", label: "April" },
+    { value: "5", label: "May" },
+    { value: "6", label: "June" },
+    { value: "7", label: "July" },
+    { value: "8", label: "August" },
+    { value: "9", label: "September" },
+    { value: "10", label: "October" },
+    { value: "11", label: "November" },
+    { value: "12", label: "December" },
+  ];
 
   return (
     <Layout>
@@ -48,20 +168,65 @@ const ManageKPIs = () => {
             <CardDescription>Add new employees to the system</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div>
                 <Label htmlFor="employee-name">Employee Name</Label>
-                <Input id="employee-name" placeholder="Enter employee name" />
+                <Input 
+                  id="employee-name" 
+                  placeholder="Enter employee name" 
+                  value={employeeName}
+                  onChange={(e) => setEmployeeName(e.target.value)}
+                />
               </div>
               <div>
                 <Label htmlFor="employee-email">Employee Email</Label>
-                <Input id="employee-email" placeholder="Enter employee email" type="email" />
+                <Input 
+                  id="employee-email" 
+                  placeholder="Enter employee email" 
+                  type="email"
+                  value={employeeEmail}
+                  onChange={(e) => setEmployeeEmail(e.target.value)}
+                />
               </div>
               <div className="flex items-end">
-                <Button onClick={handleAddEmployee} className="w-full">
+                <Button 
+                  onClick={handleAddEmployee} 
+                  className="w-full"
+                  disabled={addEmployee.isPending}
+                >
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Employee
+                  {addEmployee.isPending ? "Adding..." : "Add Employee"}
                 </Button>
+              </div>
+            </div>
+
+            {/* Admin Email Management */}
+            <div className="border-t pt-6">
+              <div className="flex items-center space-x-2 mb-4">
+                <Settings className="h-5 w-5" />
+                <h3 className="text-lg font-semibold">Admin Email Management</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="admin-email">Add Admin Email</Label>
+                  <Input 
+                    id="admin-email" 
+                    placeholder="Enter admin email" 
+                    type="email"
+                    value={newAdminEmail}
+                    onChange={(e) => setNewAdminEmail(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button 
+                    onClick={handleAddAdmin} 
+                    className="w-full"
+                    disabled={addAdminEmail.isPending}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    {addAdminEmail.isPending ? "Adding..." : "Add Admin"}
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -83,12 +248,14 @@ const ManageKPIs = () => {
                 <Label>Select Employee</Label>
                 <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Hasnat" />
+                    <SelectValue placeholder="Select Employee" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="hasnat">Hasnat</SelectItem>
-                    <SelectItem value="ahmed">Ahmed</SelectItem>
-                    <SelectItem value="sara">Sara</SelectItem>
+                    {employees.map((employee) => (
+                      <SelectItem key={employee.id} value={employee.id}>
+                        {employee.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
