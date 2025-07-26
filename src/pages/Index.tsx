@@ -94,34 +94,125 @@ const Index = () => {
         </div>
 
         {/* KPI Overview */}
-        <div className="bg-muted/50">
+        <div className="bg-muted/border border-border rounded-lg p-6 mb-16">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16">
-            <h2 className="text-2xl font-bold text-foreground mb-8 text-center">Key Performance Indicators</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-center">
+            <h2 className="text-2xl font-bold text-foreground mb-8 text-center">
+              Key Performance Indicators
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-center">
+              {/* 1 */}
               <div className="bg-card p-6 rounded-lg">
-                <h3 className="font-semibold text-foreground">Margin Target</h3>
+                <h3 className="font-semibold text-foreground">Margin</h3>
                 <p className="text-2xl font-bold text-primary">3M PKR</p>
-                <p className="text-sm text-muted-foreground">30% Weight</p>
+                <p className="text-sm text-muted-foreground">Weight: 30%</p>
               </div>
+              {/* 2 */}
               <div className="bg-card p-6 rounded-lg">
-                <h3 className="font-semibold text-foreground">Calls Target</h3>
+                <h3 className="font-semibold text-foreground">Calls</h3>
                 <p className="text-2xl font-bold text-primary">1,540</p>
-                <p className="text-sm text-muted-foreground">20% Weight</p>
+                <p className="text-sm text-muted-foreground">Weight: 20%</p>
               </div>
+              {/* 3 */}
               <div className="bg-card p-6 rounded-lg">
-                <h3 className="font-semibold text-foreground">Leads Target</h3>
+                <h3 className="font-semibold text-foreground">Leads Generated</h3>
                 <p className="text-2xl font-bold text-primary">1,100</p>
-                <p className="text-sm text-muted-foreground">5% Weight</p>
+                <p className="text-sm text-muted-foreground">Weight: 5%</p>
               </div>
+              {/* 4 */}
               <div className="bg-card p-6 rounded-lg">
-                <h3 className="font-semibold text-foreground">Meetings</h3>
-                <p className="text-2xl font-bold text-primary">66</p>
-                <p className="text-sm text-muted-foreground">25% Weight</p>
+                <h3 className="font-semibold text-foreground">Solo Closing</h3>
+                <p className="text-2xl font-bold text-primary">1</p>
+                <p className="text-sm text-muted-foreground">Weight: 10%</p>
+              </div>
+              {/* 5 */}
+              <div className="bg-card p-6 rounded-lg">
+                <h3 className="font-semibold text-foreground">Out-House Meetings</h3>
+                <p className="text-2xl font-bold text-primary">44</p>
+                <p className="text-sm text-muted-foreground">Weight: 10%</p>
+              </div>
+              {/* 6 */}
+              <div className="bg-card p-6 rounded-lg">
+                <h3 className="font-semibold text-foreground">In-House Meetings</h3>
+                <p className="text-2xl font-bold text-primary">22</p>
+                <p className="text-sm text-muted-foreground">Weight: 15%</p>
+              </div>
+              {/* 7 */}
+              <div className="bg-card p-6 rounded-lg">
+                <h3 className="font-semibold text-foreground">Product Knowledge</h3>
+                <p className="text-2xl font-bold text-primary">100%</p>
+                <p className="text-sm text-muted-foreground">Weight: 5%</p>
+              </div>
+              {/* 8 */}
+              <div className="bg-card p-6 rounded-lg">
+                <h3 className="font-semibold text-foreground">SMD</h3>
+                <p className="text-2xl font-bold text-primary">100%</p>
+                <p className="text-sm text-muted-foreground">Weight: 5%</p>
               </div>
             </div>
           </div>
         </div>
+
       </div>
+      {/* --- Footer starts here --- */}
+      <footer className="bg-white rounded-lg shadow-sm m-4 dark:bg-gray-800">
+        <div className="w-full mx-auto max-w-screen-xl p-4 md:flex md:items-center md:justify-between">
+          <span className="text-sm text-gray-500 sm:text-center dark:text-gray-400">
+            © {new Date().getFullYear()}{" "}
+            <a
+              href="https://taha-khadim.vercel.app"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:underline font-semibold"
+            >
+              Made with ❤️ by Taha Khadim
+            </a>. All Rights Reserved.
+          </span>
+          <ul className="flex flex-wrap items-center mt-3 text-sm font-medium text-gray-500 dark:text-gray-400 sm:mt-0">
+            <li>
+              <a
+                href="https://taha-khadim.vercel.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline me-4 md:me-6"
+              >
+                About
+              </a>
+            </li>
+            <li>
+              <a
+                href="https://taha-khadim.vercel.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline me-4 md:me-6"
+              >
+                Privacy Policy
+              </a>
+            </li>
+            <li>
+              <a
+                href="https://taha-khadim.vercel.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline me-4 md:me-6"
+              >
+                Licensing
+              </a>
+            </li>
+            <li>
+              <a
+                href="https://taha-khadim.vercel.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline"
+              >
+                Contact
+              </a>
+            </li>
+          </ul>
+        </div>
+      </footer>
+
+
     </Layout>
   );
 };

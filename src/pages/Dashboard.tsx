@@ -1,17 +1,103 @@
 import Layout from "@/components/Layout";
-import KPICard from "@/components/KPICard";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  Cell,
+} from "recharts";
 import { useEmployees } from "@/hooks/useEmployees";
 import { useKPIData } from "@/hooks/useKPIData";
 import { useState, useMemo } from "react";
 
+// --- Helper Functions ---
+
+function getWorkingDaysInMonth(year, month) {
+  let count = 0;
+  const date = new Date(year, month - 1, 1);
+  while (date.getMonth() === month - 1) {
+    const day = date.getDay();
+    if (day !== 0 && day !== 6) count++;
+    date.setDate(date.getDate() + 1);
+  }
+  return count;
+}
+
+function getISOWeek(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+  const yearStart = new Date(d.getFullYear(), 0, 1);
+  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+}
+
+function getWorkingDaysInWeek(year, week, month) {
+  let count = 0;
+  const date = new Date(year, 0, 1 + (week - 1) * 7);
+  // Move to Monday of ISO week
+  date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+  for (let i = 0; i < 7; i++) {
+    const thisDate = new Date(date);
+    thisDate.setDate(date.getDate() + i);
+    if (
+      thisDate.getFullYear() === year &&
+      thisDate.getMonth() + 1 === Number(month) &&
+      thisDate.getDay() !== 0 &&
+      thisDate.getDay() !== 6
+    ) {
+      count++;
+    }
+  }
+  return count;
+}
+
+const ProgressBar = ({ value }) => (
+  <div className="h-2 w-full bg-gray-200 rounded">
+    <div
+      className="h-2 rounded"
+      style={{
+        width: `${Math.min(value, 100)}%`,
+        background:
+          value >= 100
+            ? "#22c55e"
+            : value >= 50
+            ? "#f59e42"
+            : "#f87171",
+        transition: "width 0.4s",
+      }}
+    ></div>
+  </div>
+);
+
+// --- Main Component ---
 const Dashboard = () => {
-  const [selectedEmployee, setSelectedEmployee] = useState<string>("all");
-  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().getMonth() + 1 + "");
-  const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear() + "");
+  const [selectedEmployee, setSelectedEmployee] = useState("Hansat");
+  const [selectedMonth, setSelectedMonth] = useState("7");
+  const [selectedViewType, setSelectedViewType] = useState("Monthly");
+  const [selectedWeek, setSelectedWeek] = useState("1");
+  const [selectedDay, setSelectedDay] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
+  const currentYear = new Date().getFullYear();
+  const [selectedYear] = useState(String(currentYear));
 
   const { data: employees = [] } = useEmployees();
   const { data: kpiData = [], isLoading } = useKPIData({
@@ -20,7 +106,18 @@ const Dashboard = () => {
     year: selectedYear,
   });
 
-  // KPI targets as defined in requirements
+  // Set week options for selected month/year
+  const weekSet = new Set();
+  kpiData.forEach((rec) => {
+    if (rec.date) weekSet.add(getISOWeek(rec.date));
+  });
+  const weeksInData = Array.from(weekSet).sort((a, b) => a - b);
+  const weekOptions =
+    weeksInData.length > 0
+      ? weeksInData
+      : [1, 2, 3, 4, 5]; // fallback
+
+  // KPI targets & weights
   const kpiTargets = {
     margin: 3000000,
     calls: 1540,
@@ -43,58 +140,183 @@ const Dashboard = () => {
     smd: 5,
   };
 
-  // Calculate aggregated KPI data for the selected period
-  const aggregatedKPIs = useMemo(() => {
-    const totals = kpiData.reduce((acc, record) => {
-      acc.margin += record.margin || 0;
-      acc.calls += record.calls || 0;
-      acc.leads_generated += record.leads_generated || 0;
-      acc.solo_closing += record.solo_closing || 0;
-      acc.out_house_meetings += record.out_house_meetings || 0;
-      acc.in_house_meetings += record.in_house_meetings || 0;
-      acc.product_knowledge = Math.max(acc.product_knowledge, record.product_knowledge || 0);
-      acc.smd = Math.max(acc.smd, record.smd || 0);
-      return acc;
-    }, {
-      margin: 0,
-      calls: 0,
-      leads_generated: 0,
-      solo_closing: 0,
-      out_house_meetings: 0,
-      in_house_meetings: 0,
-      product_knowledge: 0,
-      smd: 0,
-    });
+  // ---- Working Days Calculation ----
+  const year = Number(selectedYear);
+  const month = Number(selectedMonth);
+  const workingDaysInMonth = getWorkingDaysInMonth(year, month);
+  let workingDaysInPeriod = workingDaysInMonth;
 
-    return [
-      { title: "Margin", achieved: totals.margin, target: kpiTargets.margin, weight: kpiWeights.margin, unit: " PKR" },
-      { title: "Calls", achieved: totals.calls, target: kpiTargets.calls, weight: kpiWeights.calls },
-      { title: "Leads Generated", achieved: totals.leads_generated, target: kpiTargets.leads_generated, weight: kpiWeights.leads_generated },
-      { title: "Solo Closing", achieved: totals.solo_closing, target: kpiTargets.solo_closing, weight: kpiWeights.solo_closing },
-      { title: "Out-House Meetings", achieved: totals.out_house_meetings, target: kpiTargets.out_house_meetings, weight: kpiWeights.out_house_meetings },
-      { title: "In-House Meetings", achieved: totals.in_house_meetings, target: kpiTargets.in_house_meetings, weight: kpiWeights.in_house_meetings },
-      { title: "Product Knowledge", achieved: totals.product_knowledge, target: kpiTargets.product_knowledge, weight: kpiWeights.product_knowledge, unit: "%" },
-      { title: "SMD", achieved: totals.smd, target: kpiTargets.smd, weight: kpiWeights.smd, unit: "%" },
-    ];
-  }, [kpiData]);
-
-  // Generate chart data for daily performance
-  const chartData = useMemo(() => {
-    const dailyData = kpiData.reduce((acc, record) => {
-      const day = new Date(record.date).getDate();
-      if (!acc[day]) {
-        acc[day] = { name: `Day ${day}`, margin: 0, calls: 0 };
-      }
-      acc[day].margin += record.margin || 0;
-      acc[day].calls += record.calls || 0;
-      return acc;
-    }, {} as Record<number, { name: string; margin: number; calls: number }>);
-
-    return Object.values(dailyData).sort((a, b) => 
-      parseInt(a.name.split(' ')[1]) - parseInt(b.name.split(' ')[1])
+  if (selectedViewType === "Weekly") {
+    workingDaysInPeriod = getWorkingDaysInWeek(
+      year,
+      Number(selectedWeek),
+      month
     );
-  }, [kpiData]);
+  } else if (selectedViewType === "Daily") {
+    const dayDate = new Date(selectedDay);
+    workingDaysInPeriod =
+      dayDate.getDay() !== 0 && dayDate.getDay() !== 6 ? 1 : 0;
+  }
 
+  const periodMultiplier = workingDaysInMonth
+    ? workingDaysInPeriod / workingDaysInMonth
+    : 1;
+  const adjustedKpiTargets = Object.fromEntries(
+    Object.entries(kpiTargets).map(([k, v]) => [
+      k,
+      Math.round(v * periodMultiplier),
+    ])
+  );
+
+  // ---- FILTER KPI DATA ----
+  const filteredKpiData = useMemo(() => {
+    if (!kpiData.length) return [];
+    if (selectedViewType === "Monthly") {
+      // All records in selected month/year
+      return kpiData.filter(
+        (rec) =>
+          new Date(rec.date).getMonth() + 1 === Number(selectedMonth) &&
+          new Date(rec.date).getFullYear() === Number(selectedYear)
+      );
+    } else if (selectedViewType === "Weekly") {
+      // Week filter
+      return kpiData.filter(
+        (rec) =>
+          getISOWeek(rec.date) === Number(selectedWeek) &&
+          new Date(rec.date).getFullYear() === Number(selectedYear) &&
+          new Date(rec.date).getMonth() + 1 === Number(selectedMonth)
+      );
+    } else if (selectedViewType === "Daily") {
+      // Specific day (ISO date)
+      return kpiData.filter(
+        (rec) =>
+          rec.date &&
+          rec.date.slice(0, 10) === selectedDay &&
+          new Date(rec.date).getFullYear() === Number(selectedYear)
+      );
+    }
+    return kpiData;
+  }, [kpiData, selectedMonth, selectedWeek, selectedDay, selectedViewType, selectedYear]);
+
+  // ---- AGGREGATE KPI DATA (capped at 100%) ----
+  const aggregatedKPIs = useMemo(() => {
+    const totals = filteredKpiData.reduce(
+      (acc, record) => {
+        acc.margin += record.margin || 0;
+        acc.calls += record.calls || 0;
+        acc.leads_generated += record.leads_generated || 0;
+        acc.solo_closing += record.solo_closing || 0;
+        acc.out_house_meetings += record.out_house_meetings || 0;
+        acc.in_house_meetings += record.in_house_meetings || 0;
+        acc.product_knowledge = Math.max(
+          acc.product_knowledge,
+          record.product_knowledge || 0
+        );
+        acc.smd = Math.max(acc.smd, record.smd || 0);
+        return acc;
+      },
+      {
+        margin: 0,
+        calls: 0,
+        leads_generated: 0,
+        solo_closing: 0,
+        out_house_meetings: 0,
+        in_house_meetings: 0,
+        product_knowledge: 0,
+        smd: 0,
+      }
+    );
+    return [
+      {
+        key: "margin",
+        title: "Margin",
+        achieved: totals.margin,
+        target: adjustedKpiTargets.margin,
+        weight: kpiWeights.margin,
+        unit: "",
+      },
+      {
+        key: "calls",
+        title: "Calls",
+        achieved: totals.calls,
+        target: adjustedKpiTargets.calls,
+        weight: kpiWeights.calls,
+        unit: "",
+      },
+      {
+        key: "leads_generated",
+        title: "Leads",
+        achieved: totals.leads_generated,
+        target: adjustedKpiTargets.leads_generated,
+        weight: kpiWeights.leads_generated,
+        unit: "",
+      },
+      {
+        key: "solo_closing",
+        title: "Solo Closing",
+        achieved: totals.solo_closing,
+        target: adjustedKpiTargets.solo_closing,
+        weight: kpiWeights.solo_closing,
+        unit: "",
+      },
+      {
+        key: "out_house_meetings",
+        title: "Out-House Meetings",
+        achieved: totals.out_house_meetings,
+        target: adjustedKpiTargets.out_house_meetings,
+        weight: kpiWeights.out_house_meetings,
+        unit: "",
+      },
+      {
+        key: "in_house_meetings",
+        title: "In-House Meetings",
+        achieved: totals.in_house_meetings,
+        target: adjustedKpiTargets.in_house_meetings,
+        weight: kpiWeights.in_house_meetings,
+        unit: "",
+      },
+      {
+        key: "product_knowledge",
+        title: "Product Knowledge",
+        achieved: totals.product_knowledge,
+        target: adjustedKpiTargets.product_knowledge,
+        weight: kpiWeights.product_knowledge,
+        unit: "%",
+      },
+      {
+        key: "smd",
+        title: "SMD",
+        achieved: totals.smd,
+        target: adjustedKpiTargets.smd,
+        weight: kpiWeights.smd,
+        unit: "%",
+      },
+    ];
+  }, [filteredKpiData, adjustedKpiTargets]);
+
+  // ---- Overall weighted score (max 100, capped) ----
+  const overallScore = useMemo(() => {
+    const weightedSum = aggregatedKPIs.reduce((sum, kpi) => {
+      const pct = Math.min(kpi.achieved / (kpi.target || 1), 1); // Cap at 100%
+      return sum + pct * kpi.weight;
+    }, 0);
+    return Math.round(weightedSum);
+  }, [aggregatedKPIs]);
+
+  // ---- Chart Data (capped at 100%) and Color ----
+  const chartData = aggregatedKPIs.map((kpi) => {
+    const pct = (kpi.achieved / (kpi.target || 1)) * 100;
+    let color = "#f87171"; // red for <50%
+    if (pct >= 100) color = "#22c55e"; // green
+    else if (pct >= 50) color = "#f59e42"; // orange
+    return {
+      name: kpi.title,
+      Performance: Math.min(pct, 100), // cap at 100%
+      fill: color,
+    };
+  });
+
+  // --- Options ---
   const months = [
     { value: "1", label: "January" },
     { value: "2", label: "February" },
@@ -110,120 +332,206 @@ const Dashboard = () => {
     { value: "12", label: "December" },
   ];
 
-  const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
+  const viewTypes = [
+    { value: "Monthly", label: "Monthly" },
+    { value: "Weekly", label: "Weekly" },
+    { value: "Daily", label: "Daily" },
+  ];
 
+  // --- UI ---
   return (
     <Layout>
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Title */}
+        <div className="mb-2">
           <h1 className="text-3xl font-bold text-foreground">KPI Dashboard</h1>
-          <p className="text-muted-foreground mt-2">Monitor daily, weekly, and monthly performance</p>
+          <p className="text-muted-foreground mt-2">
+            Monitor employee performance with real-time KPI analytics
+          </p>
         </div>
 
         {/* Filters */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Filters</CardTitle>
-            <CardDescription>Filter data by employee, month, and year</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <Label>Employee</Label>
-                <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Employees" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Employees</SelectItem>
-                    {employees.map((employee) => (
-                      <SelectItem key={employee.id} value={employee.id}>
-                        {employee.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Month</Label>
-                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {months.map((month) => (
-                      <SelectItem key={month.value} value={month.value}>
-                        {month.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Year</Label>
-                <Select value={selectedYear} onValueChange={setSelectedYear}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {years.map((year) => (
-                      <SelectItem key={year} value={year.toString()}>
-                        {year}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        <div className="flex flex-wrap gap-4 mb-8 items-end bg-white p-4 rounded-lg shadow-sm">
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1 block">
+              Select Employee
+            </Label>
+            <Select
+              value={selectedEmployee}
+              onValueChange={setSelectedEmployee}
+            >
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="All Employees" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Employees</SelectItem>
+                {employees.map((employee) => (
+                  <SelectItem key={employee.id} value={employee.id}>
+                    {employee.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1 block">
+              Month
+            </Label>
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {months.map((month) => (
+                  <SelectItem key={month.value} value={month.value}>
+                    {month.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground mb-1 block">
+              View Type
+            </Label>
+            <Select
+              value={selectedViewType}
+              onValueChange={setSelectedViewType}
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {viewTypes.map((v) => (
+                  <SelectItem key={v.value} value={v.value}>
+                    {v.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {selectedViewType === "Weekly" && (
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">
+                Week
+              </Label>
+              <Select value={selectedWeek} onValueChange={setSelectedWeek}>
+                <SelectTrigger className="w-24">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {weekOptions.map((w) => (
+                    <SelectItem key={w} value={w.toString()}>
+                      Week {w}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Daily Performance Chart */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Daily Performance</CardTitle>
-            <CardDescription>
-              {selectedEmployee ? 
-                `Performance for ${employees.find(e => e.id === selectedEmployee)?.name || 'Selected Employee'}` : 
-                'Performance for all employees'
-              } in {months.find(m => m.value === selectedMonth)?.label} {selectedYear}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Bar dataKey="margin" fill="hsl(var(--primary))" name="Margin (PKR)" />
-                  <Bar dataKey="calls" fill="hsl(var(--accent))" name="Calls" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* KPI Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {isLoading ? (
-            Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="animate-pulse">
-                <div className="h-32 bg-muted rounded-lg"></div>
-              </div>
-            ))
-          ) : (
-            aggregatedKPIs.map((kpi, index) => (
-              <KPICard
-                key={index}
-                title={kpi.title}
-                achieved={kpi.achieved}
-                target={kpi.target}
-                weight={kpi.weight}
-                unit={kpi.unit}
-              />
-            ))
           )}
+          {selectedViewType === "Daily" && (
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">
+                Day
+              </Label>
+              <input
+                type="date"
+                className="border rounded px-2 py-1 w-36 text-sm"
+                value={selectedDay}
+                onChange={(e) => setSelectedDay(e.target.value)}
+                max={new Date().toISOString().slice(0, 10)}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Score + Chart section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          {/* Score Card */}
+          <Card className="flex flex-col items-center justify-center h-56 shadow-md" style={{ height: 'auto' }}>
+            <div className="text-xs text-muted-foreground mb-2">
+              Weighted performance score for {selectedViewType.toLowerCase()} view
+            </div>
+            <div className="text-6xl font-bold mb-2">{overallScore}%</div>
+            <div className="text-lg text-muted-foreground">
+              {selectedViewType} performance
+            </div>
+          </Card>
+          {/* KPI Performance Chart */}
+          <Card className="shadow-md">
+            <CardHeader>
+              <CardTitle>KPI Performance</CardTitle>
+              <CardDescription>
+                Achieved vs Target KPIs for the {selectedViewType.toLowerCase()}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} barSize={32}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                    <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
+                    <Tooltip
+                      formatter={(value) => `${value}%`}
+                      labelFormatter={(label) => `${label}`}
+                    />
+                    <Bar dataKey="Performance">
+                      {chartData.map((entry, idx) => (
+                        <Cell key={`cell-${idx}`} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* KPI Metric Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {isLoading
+            ? Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="animate-pulse">
+                  <div className="h-32 bg-gray-100 rounded-lg"></div>
+                </div>
+              ))
+            : aggregatedKPIs.map((kpi, idx) => {
+                const percent = Math.min(
+                  (kpi.achieved / (kpi.target || 1)) * 100,
+                  100
+                );
+                return (
+                  <Card
+                    key={idx}
+                    className="flex flex-col h-32 justify-between p-4 shadow-md"
+                  >
+                    <div className="flex justify-between items-center">
+                      <div className="font-semibold">{kpi.title}</div>
+                      <div className="text-xs text-gray-400">
+                        Weight: {kpi.weight}%
+                      </div>
+                    </div>
+                    <div className="mt-2 text-2xl font-bold flex items-end">
+                      {kpi.achieved}
+                      {kpi.unit && (
+                        <span className="ml-1 text-base font-normal">
+                          {kpi.unit}
+                        </span>
+                      )}
+                      <span className="ml-2 text-xs text-gray-400 font-normal">
+                        / {kpi.target}
+                      </span>
+                    </div>
+                    <div className="mt-2">
+                      <ProgressBar value={percent} />
+                      <div className="text-xs text-gray-500 mt-1">
+                        {percent.toFixed(1)}%
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
         </div>
       </div>
     </Layout>

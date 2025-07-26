@@ -7,16 +7,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Plus, Users, BarChart3, Settings } from "lucide-react";
 import { useState } from "react";
+import { Tab } from "@headlessui/react";
+import clsx from "clsx";
 import { useEmployees, useAddEmployee } from "@/hooks/useEmployees";
 import { useKPIData, useAddKPIData } from "@/hooks/useKPIData";
 import { useAdminEmails, useAddAdminEmail } from "@/hooks/useAdminEmails";
 
 const ManageKPIs = () => {
-  // Employee form state
+  // State
   const [employeeName, setEmployeeName] = useState("");
   const [employeeEmail, setEmployeeEmail] = useState("");
-  
-  // KPI form state
   const [selectedEmployee, setSelectedEmployee] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1 + "");
   const [selectedDay, setSelectedDay] = useState(new Date().getDate() + "");
@@ -30,8 +30,6 @@ const ManageKPIs = () => {
     product_knowledge: "",
     smd: "",
   });
-
-  // Admin email form state
   const [newAdminEmail, setNewAdminEmail] = useState("");
 
   // Hooks
@@ -52,11 +50,9 @@ const ManageKPIs = () => {
 
   const dayData = existingKPIData?.find(data => data.date === selectedDate);
 
+  // Handlers
   const handleAddEmployee = async () => {
-    if (!employeeName.trim() || !employeeEmail.trim()) {
-      return;
-    }
-    
+    if (!employeeName.trim() || !employeeEmail.trim()) return;
     try {
       await addEmployee.mutateAsync({
         name: employeeName.trim(),
@@ -64,16 +60,11 @@ const ManageKPIs = () => {
       });
       setEmployeeName("");
       setEmployeeEmail("");
-    } catch (error) {
-      // Error handling is done in the hook
-    }
+    } catch {}
   };
 
   const handleSaveKPIData = async () => {
-    if (!selectedEmployee) {
-      return;
-    }
-
+    if (!selectedEmployee) return;
     try {
       await addKPIData.mutateAsync({
         employee_id: selectedEmployee,
@@ -87,8 +78,6 @@ const ManageKPIs = () => {
         product_knowledge: parseFloat(kpiValues.product_knowledge) || 0,
         smd: parseFloat(kpiValues.smd) || 0,
       });
-      
-      // Reset form
       setKpiValues({
         margin: "",
         calls: "",
@@ -99,24 +88,17 @@ const ManageKPIs = () => {
         product_knowledge: "",
         smd: "",
       });
-    } catch (error) {
-      // Error handling is done in the hook
-    }
+    } catch {}
   };
 
   const handleAddAdmin = async () => {
-    if (!newAdminEmail.trim()) {
-      return;
-    }
-
+    if (!newAdminEmail.trim()) return;
     try {
       await addAdminEmail.mutateAsync({
         email: newAdminEmail.trim(),
       });
       setNewAdminEmail("");
-    } catch (error) {
-      // Error handling is done in the hook
-    }
+    } catch {}
   };
 
   const handleLoadExistingData = () => {
@@ -149,199 +131,294 @@ const ManageKPIs = () => {
     { value: "12", label: "December" },
   ];
 
-  return (
-    <Layout>
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground">KPI Management</h1>
-          <p className="text-muted-foreground mt-2">Add employees and manage daily KPI data</p>
+  // ----------- Tabs content below ------------------
+  const renderKPITab = () => (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center space-x-2">
+          <BarChart3 className="h-5 w-5" />
+          <span>Daily KPI Data Entry</span>
+        </CardTitle>
+        <CardDescription>Enter daily KPI data for employees</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div>
+            <Label>Select Employee</Label>
+            <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select Employee" />
+              </SelectTrigger>
+              <SelectContent>
+                {employees.map((employee) => (
+                  <SelectItem key={employee.id} value={employee.id}>
+                    {employee.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Month</Label>
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {months.map((month) => (
+                  <SelectItem key={month.value} value={month.value}>{month.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Day</Label>
+            <Select value={selectedDay} onValueChange={setSelectedDay}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: 31 }, (_, i) => (
+                  <SelectItem key={i + 1} value={(i + 1).toString()}>
+                    {i + 1}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button variant="outline" size="sm" onClick={handleLoadExistingData}>Load</Button>
+          </div>
         </div>
 
-        {/* Employee Management */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Users className="h-5 w-5" />
-              <span>Employee Management</span>
-              <Badge variant="destructive">Admin Only</Badge>
-            </CardTitle>
-            <CardDescription>Add new employees to the system</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div>
-                <Label htmlFor="employee-name">Employee Name</Label>
-                <Input 
-                  id="employee-name" 
-                  placeholder="Enter employee name" 
-                  value={employeeName}
-                  onChange={(e) => setEmployeeName(e.target.value)}
-                />
-              </div>
-              <div>
-                <Label htmlFor="employee-email">Employee Email</Label>
-                <Input 
-                  id="employee-email" 
-                  placeholder="Enter employee email" 
-                  type="email"
-                  value={employeeEmail}
-                  onChange={(e) => setEmployeeEmail(e.target.value)}
-                />
-              </div>
-              <div className="flex items-end">
-                <Button 
-                  onClick={handleAddEmployee} 
-                  className="w-full"
-                  disabled={addEmployee.isPending}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  {addEmployee.isPending ? "Adding..." : "Add Employee"}
-                </Button>
-              </div>
-            </div>
+        {dayData ? (
+          <div className="bg-muted border border-border rounded-lg p-4 mb-6">
+            <p className="text-muted-foreground text-sm">Data loaded for this date. You can edit and save again.</p>
+          </div>
+        ) : (
+          <div className="bg-green-50 border border-green-100 rounded-lg p-4 mb-6">
+            <p className="text-green-700 text-sm">✓ No data exists for this date. Ready for new entry.</p>
+          </div>
+        )}
 
-            {/* Admin Email Management */}
-            <div className="border-t pt-6">
-              <div className="flex items-center space-x-2 mb-4">
-                <Settings className="h-5 w-5" />
-                <h3 className="text-lg font-semibold">Admin Email Management</h3>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="admin-email">Add Admin Email</Label>
-                  <Input 
-                    id="admin-email" 
-                    placeholder="Enter admin email" 
-                    type="email"
-                    value={newAdminEmail}
-                    onChange={(e) => setNewAdminEmail(e.target.value)}
-                  />
-                </div>
-                <div className="flex items-end">
-                  <Button 
-                    onClick={handleAddAdmin} 
-                    className="w-full"
-                    disabled={addAdminEmail.isPending}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    {addAdminEmail.isPending ? "Adding..." : "Add Admin"}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+          <div>
+            <Label htmlFor="margin">Margin (PKR)</Label>
+            <Input
+              id="margin"
+              placeholder="0"
+              type="number"
+              value={kpiValues.margin}
+              onChange={e => setKpiValues(val => ({ ...val, margin: e.target.value }))}
+            />
+          </div>
+          <div>
+            <Label htmlFor="calls">Calls</Label>
+            <Input
+              id="calls"
+              placeholder="0"
+              type="number"
+              value={kpiValues.calls}
+              onChange={e => setKpiValues(val => ({ ...val, calls: e.target.value }))}
+            />
+          </div>
+          <div>
+            <Label htmlFor="leads">Leads Generated</Label>
+            <Input
+              id="leads"
+              placeholder="0"
+              type="number"
+              value={kpiValues.leads_generated}
+              onChange={e => setKpiValues(val => ({ ...val, leads_generated: e.target.value }))}
+            />
+          </div>
+          <div>
+            <Label htmlFor="solo-closing">Solo Closing</Label>
+            <Input
+              id="solo-closing"
+              placeholder="0"
+              type="number"
+              value={kpiValues.solo_closing}
+              onChange={e => setKpiValues(val => ({ ...val, solo_closing: e.target.value }))}
+            />
+          </div>
+          <div>
+            <Label htmlFor="out-house">Out-House Meetings</Label>
+            <Input
+              id="out-house"
+              placeholder="0"
+              type="number"
+              value={kpiValues.out_house_meetings}
+              onChange={e => setKpiValues(val => ({ ...val, out_house_meetings: e.target.value }))}
+            />
+          </div>
+          <div>
+            <Label htmlFor="in-house">In-House Meetings</Label>
+            <Input
+              id="in-house"
+              placeholder="0"
+              type="number"
+              value={kpiValues.in_house_meetings}
+              onChange={e => setKpiValues(val => ({ ...val, in_house_meetings: e.target.value }))}
+            />
+          </div>
+          <div>
+            <Label htmlFor="product-knowledge">Product Knowledge (%)</Label>
+            <Input
+              id="product-knowledge"
+              placeholder="0"
+              type="number"
+              max="100"
+              value={kpiValues.product_knowledge}
+              onChange={e => setKpiValues(val => ({ ...val, product_knowledge: e.target.value }))}
+            />
+          </div>
+          <div>
+            <Label htmlFor="smd">SMD (%)</Label>
+            <Input
+              id="smd"
+              placeholder="0"
+              type="number"
+              max="100"
+              value={kpiValues.smd}
+              onChange={e => setKpiValues(val => ({ ...val, smd: e.target.value }))}
+            />
+          </div>
+        </div>
 
-        {/* Daily KPI Data Entry */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <BarChart3 className="h-5 w-5" />
-              <span>Daily KPI Data Entry</span>
-            </CardTitle>
-            <CardDescription>Enter daily KPI data for employees</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {/* Date and Employee Selection */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <div>
-                <Label>Select Employee</Label>
-                <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select Employee" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees.map((employee) => (
-                      <SelectItem key={employee.id} value={employee.id}>
-                        {employee.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Month</Label>
-                <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="July">July</SelectItem>
-                    <SelectItem value="August">August</SelectItem>
-                    <SelectItem value="September">September</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Day</Label>
-                <Select value={selectedDay} onValueChange={setSelectedDay}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 31 }, (_, i) => (
-                      <SelectItem key={i + 1} value={(i + 1).toString()}>
-                        {i + 1}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Button variant="outline" size="sm">New</Button>
-                <Button variant="outline" size="sm">Edit</Button>
-              </div>
-            </div>
+        <div className="flex justify-end">
+          <Button onClick={handleSaveKPIData} className="bg-primary hover:bg-primary/80 text-primary-foreground">
+            Save KPI Data
+          </Button>
 
-            {/* Status Message */}
-            <div className="bg-success/10 border border-success/20 rounded-lg p-4 mb-6">
-              <p className="text-success text-sm">✓ No data exists for this date. Ready for new entry.</p>
-            </div>
-
-            {/* KPI Input Fields */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-              <div>
-                <Label htmlFor="margin">Margin (PKR)</Label>
-                <Input id="margin" placeholder="0" type="number" />
-              </div>
-              <div>
-                <Label htmlFor="calls">Calls</Label>
-                <Input id="calls" placeholder="0" type="number" />
-              </div>
-              <div>
-                <Label htmlFor="leads">Leads Generated</Label>
-                <Input id="leads" placeholder="0" type="number" />
-              </div>
-              <div>
-                <Label htmlFor="solo-closing">Solo Closing</Label>
-                <Input id="solo-closing" placeholder="0" type="number" />
-              </div>
-              <div>
-                <Label htmlFor="out-house">Out-House Meetings</Label>
-                <Input id="out-house" placeholder="0" type="number" />
-              </div>
-              <div>
-                <Label htmlFor="in-house">In-House Meetings</Label>
-                <Input id="in-house" placeholder="0" type="number" />
-              </div>
-              <div>
-                <Label htmlFor="product-knowledge">Product Knowledge (%)</Label>
-                <Input id="product-knowledge" placeholder="0" type="number" max="100" />
-              </div>
-              <div>
-                <Label htmlFor="smd">SMD (%)</Label>
-                <Input id="smd" placeholder="0" type="number" max="100" />
-              </div>
-            </div>
-
-            <div className="flex justify-end">
-              <Button onClick={handleSaveKPIData}>Save KPI Data</Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </Layout>
+        </div>
+      </CardContent>
+    </Card>
   );
+
+  const renderEmployeeAdminTab = () => (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center space-x-2">
+          <Users className="h-5 w-5" />
+          <span>Employee Management</span>
+          <Badge variant="destructive">Admin Only</Badge>
+        </CardTitle>
+        <CardDescription>Add new employees to the system</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div>
+            <Label htmlFor="employee-name">Employee Name</Label>
+            <Input 
+              id="employee-name" 
+              placeholder="Enter employee name" 
+              value={employeeName}
+              onChange={(e) => setEmployeeName(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="employee-email">Employee Email</Label>
+            <Input 
+              id="employee-email" 
+              placeholder="Enter employee email" 
+              type="email"
+              value={employeeEmail}
+              onChange={(e) => setEmployeeEmail(e.target.value)}
+            />
+          </div>
+          <div className="flex items-end">
+            <Button 
+              onClick={handleAddEmployee} 
+              className="bg-primary hover:bg-primary/80 text-primary-foreground"
+              disabled={addEmployee.isPending}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              {addEmployee.isPending ? "Adding..." : "Add Employee"}
+            </Button>
+          </div>
+        </div>
+        <div className="border-t pt-6">
+          <div className="flex items-center space-x-2 mb-4">
+            <Settings className="h-5 w-5" />
+            <h3 className="text-lg font-semibold">Admin Email Management</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="admin-email">Add Admin Email</Label>
+              <Input 
+                id="admin-email" 
+                placeholder="Enter admin email" 
+                type="email"
+                value={newAdminEmail}
+                onChange={(e) => setNewAdminEmail(e.target.value)}
+              />
+            </div>
+            <div className="flex items-end">
+              <Button 
+                onClick={handleAddAdmin} 
+                className="bg-primary hover:bg-primary/80 text-primary-foreground"
+                disabled={addAdminEmail.isPending}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                {addAdminEmail.isPending ? "Adding..." : "Add Admin"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  // ----------------------- Layout -------------------------------
+  return (
+          <div className="min-h-screen bg-background">
+            <Layout>
+              <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+                <div className="mb-8">
+                  <h1 className="text-3xl font-bold text-foreground">KPI Management</h1>
+                  <p className="text-muted-foreground mt-2">Add employees, manage admins, and enter daily KPIs</p>
+                </div>
+                <Tab.Group>
+                  {/* Centered Tabs */}
+                  <div className="w-full flex justify-center mb-8">
+                    <Tab.List className="inline-flex bg-muted p-2 rounded-xl shadow-sm border border-border gap-2">
+                      <Tab
+                        className={({ selected }) =>
+                          clsx(
+                            "px-8 py-2 rounded-lg font-semibold transition focus:outline-none text-lg",
+                            selected
+                              ? "bg-primary text-primary-foreground shadow"
+                              : "bg-card text-primary hover:bg-muted"
+                          )
+                        }
+                      >
+                        Daily KPI Management
+                      </Tab>
+                      <Tab
+                        className={({ selected }) =>
+                          clsx(
+                            "px-8 py-2 rounded-lg font-semibold transition focus:outline-none text-lg",
+                            selected
+                              ? "bg-primary text-primary-foreground shadow"
+                              : "bg-card text-primary hover:bg-muted"
+                          )
+                        }
+                      >
+                        Employee & Admin Adding
+                      </Tab>
+                    </Tab.List>
+                  </div>
+                  <Tab.Panels>
+                    <Tab.Panel>{renderKPITab()}</Tab.Panel>
+                    <Tab.Panel>{renderEmployeeAdminTab()}</Tab.Panel>
+                  </Tab.Panels>
+                </Tab.Group>
+              </div>
+            </Layout>
+          </div>
+        );
+
 };
 
 export default ManageKPIs;
