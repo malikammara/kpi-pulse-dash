@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import ManageKPIs from "./pages/ManageKPIs";
 import Auth from "./pages/Auth";
 import AdminGuard from "@/components/AdminGuard";
+import LoginGuard from "@/components/LoginGuard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -23,7 +24,14 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
-            <Route path="/dashboard" element={<Dashboard />} />
+            <Route 
+              path="/dashboard" 
+              element={
+                <LoginGuard>
+                  <Dashboard />
+                </LoginGuard>
+              } 
+            />
             <Route path="/manage" element={
               <AdminGuard>
                 <ManageKPIs />
