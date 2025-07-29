@@ -26,11 +26,24 @@ import {
 } from "recharts";
 import { useEmployees } from "@/hooks/useEmployees";
 import { useKPIData } from "@/hooks/useKPIData";
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 
-// --- Helper Functions ---
+// -- Helpers --
+function formatNumber(num: number | null | undefined): string {
+  if (num == null) return "-";
+  return num.toLocaleString();
+}
 
-function getWorkingDaysInMonth(year, month) {
+function getEmployeeLabel(
+  selectedEmployee: string,
+  employees: { id: string; name: string }[]
+): string {
+  if (selectedEmployee === "all") return "All Employees";
+  const emp = employees.find((e) => e.id === selectedEmployee);
+  return emp ? emp.name : selectedEmployee;
+}
+
+function getWorkingDaysInMonth(year: number, month: number) {
   let count = 0;
   const date = new Date(year, month - 1, 1);
   while (date.getMonth() === month - 1) {
@@ -41,15 +54,15 @@ function getWorkingDaysInMonth(year, month) {
   return count;
 }
 
-function getISOWeek(date) {
+function getISOWeek(date: string | Date) {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() + 4 - (d.getDay() || 7));
   const yearStart = new Date(d.getFullYear(), 0, 1);
-  return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 
-function getWorkingDaysInWeek(year, week, month) {
+function getWorkingDaysInWeek(year: number, week: number, month: number) {
   let count = 0;
   const date = new Date(year, 0, 1 + (week - 1) * 7);
   // Move to Monday of ISO week
@@ -69,7 +82,7 @@ function getWorkingDaysInWeek(year, week, month) {
   return count;
 }
 
-const ProgressBar = ({ value }) => (
+const ProgressBar = ({ value }: { value: number }) => (
   <div className="h-2 w-full bg-gray-200 rounded">
     <div
       className="h-2 rounded"
@@ -87,8 +100,8 @@ const ProgressBar = ({ value }) => (
   </div>
 );
 
-// --- Main Component ---
-const Dashboard = () => {
+// -- Main Component --
+const Dashboard: React.FC = () => {
   const [selectedEmployee, setSelectedEmployee] = useState("Hansat");
   const [selectedMonth, setSelectedMonth] = useState("7");
   const [selectedViewType, setSelectedViewType] = useState("Monthly");
@@ -107,8 +120,8 @@ const Dashboard = () => {
   });
 
   // Set week options for selected month/year
-  const weekSet = new Set();
-  kpiData.forEach((rec) => {
+  const weekSet = new Set<number>();
+  kpiData.forEach((rec: any) => {
     if (rec.date) weekSet.add(getISOWeek(rec.date));
   });
   const weeksInData = Array.from(weekSet).sort((a, b) => a - b);
@@ -140,18 +153,14 @@ const Dashboard = () => {
     smd: 5,
   };
 
-  // ---- Working Days Calculation ----
+  // Working Days Calculation
   const year = Number(selectedYear);
   const month = Number(selectedMonth);
   const workingDaysInMonth = getWorkingDaysInMonth(year, month);
   let workingDaysInPeriod = workingDaysInMonth;
 
   if (selectedViewType === "Weekly") {
-    workingDaysInPeriod = getWorkingDaysInWeek(
-      year,
-      Number(selectedWeek),
-      month
-    );
+    workingDaysInPeriod = getWorkingDaysInWeek(year, Number(selectedWeek), month);
   } else if (selectedViewType === "Daily") {
     const dayDate = new Date(selectedDay);
     workingDaysInPeriod =
@@ -168,28 +177,25 @@ const Dashboard = () => {
     ])
   );
 
-  // ---- FILTER KPI DATA ----
+  // FILTER KPI DATA
   const filteredKpiData = useMemo(() => {
     if (!kpiData.length) return [];
     if (selectedViewType === "Monthly") {
-      // All records in selected month/year
       return kpiData.filter(
-        (rec) =>
+        (rec: any) =>
           new Date(rec.date).getMonth() + 1 === Number(selectedMonth) &&
           new Date(rec.date).getFullYear() === Number(selectedYear)
       );
     } else if (selectedViewType === "Weekly") {
-      // Week filter
       return kpiData.filter(
-        (rec) =>
+        (rec: any) =>
           getISOWeek(rec.date) === Number(selectedWeek) &&
           new Date(rec.date).getFullYear() === Number(selectedYear) &&
           new Date(rec.date).getMonth() + 1 === Number(selectedMonth)
       );
     } else if (selectedViewType === "Daily") {
-      // Specific day (ISO date)
       return kpiData.filter(
-        (rec) =>
+        (rec: any) =>
           rec.date &&
           rec.date.slice(0, 10) === selectedDay &&
           new Date(rec.date).getFullYear() === Number(selectedYear)
@@ -198,10 +204,10 @@ const Dashboard = () => {
     return kpiData;
   }, [kpiData, selectedMonth, selectedWeek, selectedDay, selectedViewType, selectedYear]);
 
-  // ---- AGGREGATE KPI DATA (capped at 100%) ----
+  // AGGREGATE KPI DATA
   const aggregatedKPIs = useMemo(() => {
     const totals = filteredKpiData.reduce(
-      (acc, record) => {
+      (acc: any, record: any) => {
         acc.margin += record.margin || 0;
         acc.calls += record.calls || 0;
         acc.leads_generated += record.leads_generated || 0;
@@ -294,7 +300,7 @@ const Dashboard = () => {
     ];
   }, [filteredKpiData, adjustedKpiTargets]);
 
-  // ---- Overall weighted score (max 100, capped) ----
+  // Weighted score
   const overallScore = useMemo(() => {
     const weightedSum = aggregatedKPIs.reduce((sum, kpi) => {
       const pct = Math.min(kpi.achieved / (kpi.target || 1), 1); // Cap at 100%
@@ -303,20 +309,19 @@ const Dashboard = () => {
     return Math.round(weightedSum);
   }, [aggregatedKPIs]);
 
-  // ---- Chart Data (capped at 100%) and Color ----
+  // Chart data
   const chartData = aggregatedKPIs.map((kpi) => {
     const pct = (kpi.achieved / (kpi.target || 1)) * 100;
-    let color = "#f87171"; // red for <50%
-    if (pct >= 100) color = "#22c55e"; // green
-    else if (pct >= 50) color = "#f59e42"; // orange
+    let color = "#f87171";
+    if (pct >= 100) color = "#22c55e";
+    else if (pct >= 50) color = "#f59e42";
     return {
       name: kpi.title,
-      Performance: Math.min(pct, 100), // cap at 100%
+      Performance: Math.min(pct, 100),
       fill: color,
     };
   });
 
-  // --- Options ---
   const months = [
     { value: "1", label: "January" },
     { value: "2", label: "February" },
@@ -338,7 +343,6 @@ const Dashboard = () => {
     { value: "Daily", label: "Daily" },
   ];
 
-  // --- UI ---
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -365,7 +369,7 @@ const Dashboard = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Employees</SelectItem>
-                {employees.map((employee) => (
+                {employees.map((employee: any) => (
                   <SelectItem key={employee.id} value={employee.id}>
                     {employee.name}
                   </SelectItem>
@@ -448,9 +452,9 @@ const Dashboard = () => {
         {/* Score + Chart section */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {/* Score Card */}
-          <Card className="flex flex-col items-center justify-center h-56 shadow-md" style={{ height: 'auto' }}>
+          <Card className="flex flex-col items-center justify-center h-56 shadow-md" style={{ height: "auto" }}>
             <div className="text-xs text-muted-foreground mb-2">
-              Weighted performance score for {selectedViewType.toLowerCase()} view
+              Weighted performance score for {getEmployeeLabel(selectedEmployee, employees)} ({selectedViewType.toLowerCase()} view)
             </div>
             <div className="text-6xl font-bold mb-2">{overallScore}%</div>
             <div className="text-lg text-muted-foreground">
@@ -513,14 +517,14 @@ const Dashboard = () => {
                       </div>
                     </div>
                     <div className="mt-2 text-2xl font-bold flex items-end">
-                      {kpi.achieved}
+                      {formatNumber(kpi.achieved)}
                       {kpi.unit && (
                         <span className="ml-1 text-base font-normal">
                           {kpi.unit}
                         </span>
                       )}
                       <span className="ml-2 text-xs text-gray-400 font-normal">
-                        / {kpi.target}
+                        / {formatNumber(kpi.target)}
                       </span>
                     </div>
                     <div className="mt-2">
