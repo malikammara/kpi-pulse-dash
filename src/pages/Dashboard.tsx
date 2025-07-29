@@ -262,7 +262,7 @@ const Dashboard: React.FC = () => {
       },
       {
         key: "solo_closing",
-        title: "Solo Closing",
+        title: "Solo",
         achieved: totals.solo_closing,
         target: adjustedKpiTargets.solo_closing,
         weight: kpiWeights.solo_closing,
@@ -270,7 +270,7 @@ const Dashboard: React.FC = () => {
       },
       {
         key: "out_house_meetings",
-        title: "Out-House Meetings",
+        title: "Out-House",
         achieved: totals.out_house_meetings,
         target: adjustedKpiTargets.out_house_meetings,
         weight: kpiWeights.out_house_meetings,
@@ -278,7 +278,7 @@ const Dashboard: React.FC = () => {
       },
       {
         key: "in_house_meetings",
-        title: "In-House Meetings",
+        title: "In-House",
         achieved: totals.in_house_meetings,
         target: adjustedKpiTargets.in_house_meetings,
         weight: kpiWeights.in_house_meetings,
@@ -480,7 +480,7 @@ const Dashboard: React.FC = () => {
                     <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                     <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
                     <Tooltip
-                      formatter={(value) => `${value}%`}
+                      formatter={(value) => `${Number(value).toFixed(2)}%`}
                       labelFormatter={(label) => `${label}`}
                     />
                     <Bar dataKey="Performance">
