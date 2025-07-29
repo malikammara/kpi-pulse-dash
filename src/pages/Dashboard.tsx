@@ -170,10 +170,13 @@ const Dashboard: React.FC = () => {
   const periodMultiplier = workingDaysInMonth
     ? workingDaysInPeriod / workingDaysInMonth
     : 1;
+    const employeeMultiplier =
+  selectedEmployee === "all" ? employees.length : 1;
+
   const adjustedKpiTargets = Object.fromEntries(
     Object.entries(kpiTargets).map(([k, v]) => [
       k,
-      Math.round(v * periodMultiplier),
+      Math.round(v * periodMultiplier * employeeMultiplier),
     ])
   );
 
