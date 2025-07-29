@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Users, BarChart3, Settings } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Tab } from "@headlessui/react";
 import clsx from "clsx";
 import { useEmployees, useAddEmployee } from "@/hooks/useEmployees";
@@ -49,6 +49,33 @@ const ManageKPIs = () => {
   });
 
   const dayData = existingKPIData?.find(data => data.date === selectedDate);
+
+  // Auto-load KPI data when dropdowns or dayData changes
+  useEffect(() => {
+    if (dayData) {
+      setKpiValues({
+        margin: dayData.margin?.toString() || "",
+        calls: dayData.calls?.toString() || "",
+        leads_generated: dayData.leads_generated?.toString() || "",
+        solo_closing: dayData.solo_closing?.toString() || "",
+        out_house_meetings: dayData.out_house_meetings?.toString() || "",
+        in_house_meetings: dayData.in_house_meetings?.toString() || "",
+        product_knowledge: dayData.product_knowledge?.toString() || "",
+        smd: dayData.smd?.toString() || "",
+      });
+    } else {
+      setKpiValues({
+        margin: "",
+        calls: "",
+        leads_generated: "",
+        solo_closing: "",
+        out_house_meetings: "",
+        in_house_meetings: "",
+        product_knowledge: "",
+        smd: "",
+      });
+    }
+  }, [selectedEmployee, selectedMonth, selectedDay, dayData]);
 
   // Handlers
   const handleAddEmployee = async () => {
@@ -99,21 +126,6 @@ const ManageKPIs = () => {
       });
       setNewAdminEmail("");
     } catch {}
-  };
-
-  const handleLoadExistingData = () => {
-    if (dayData) {
-      setKpiValues({
-        margin: dayData.margin?.toString() || "",
-        calls: dayData.calls?.toString() || "",
-        leads_generated: dayData.leads_generated?.toString() || "",
-        solo_closing: dayData.solo_closing?.toString() || "",
-        out_house_meetings: dayData.out_house_meetings?.toString() || "",
-        in_house_meetings: dayData.in_house_meetings?.toString() || "",
-        product_knowledge: dayData.product_knowledge?.toString() || "",
-        smd: dayData.smd?.toString() || "",
-      });
-    }
   };
 
   const months = [
@@ -185,9 +197,6 @@ const ManageKPIs = () => {
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Button variant="outline" size="sm" onClick={handleLoadExistingData}>Load</Button>
           </div>
         </div>
 
@@ -290,7 +299,7 @@ const ManageKPIs = () => {
           <Button onClick={handleSaveKPIData} className="bg-primary hover:bg-primary/80 text-primary-foreground">
             Save KPI Data
           </Button>
-
+          
         </div>
       </CardContent>
     </Card>
@@ -372,52 +381,52 @@ const ManageKPIs = () => {
 
   // ----------------------- Layout -------------------------------
   return (
-          <div className="min-h-screen bg-background">
-            <Layout>
-              <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-                <div className="mb-8">
-                  <h1 className="text-3xl font-bold text-foreground">KPI Management</h1>
-                  <p className="text-muted-foreground mt-2">Add employees, manage admins, and enter daily KPIs</p>
-                </div>
-                <Tab.Group>
-                  {/* Centered Tabs */}
-                  <div className="w-full flex justify-center mb-8">
-                    <Tab.List className="inline-flex bg-muted p-2 rounded-xl shadow-sm border border-border gap-2">
-                      <Tab
-                        className={({ selected }) =>
-                          clsx(
-                            "px-8 py-2 rounded-lg font-semibold transition focus:outline-none text-lg",
-                            selected
-                              ? "bg-primary text-primary-foreground shadow"
-                              : "bg-card text-primary hover:bg-muted"
-                          )
-                        }
-                      >
-                        Daily KPI Management
-                      </Tab>
-                      <Tab
-                        className={({ selected }) =>
-                          clsx(
-                            "px-8 py-2 rounded-lg font-semibold transition focus:outline-none text-lg",
-                            selected
-                              ? "bg-primary text-primary-foreground shadow"
-                              : "bg-card text-primary hover:bg-muted"
-                          )
-                        }
-                      >
-                        Employee & Admin Adding
-                      </Tab>
-                    </Tab.List>
-                  </div>
-                  <Tab.Panels>
-                    <Tab.Panel>{renderKPITab()}</Tab.Panel>
-                    <Tab.Panel>{renderEmployeeAdminTab()}</Tab.Panel>
-                  </Tab.Panels>
-                </Tab.Group>
-              </div>
-            </Layout>
+    <div className="min-h-screen bg-background">
+      <Layout>
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-foreground">KPI Management</h1>
+            <p className="text-muted-foreground mt-2">Add employees, manage admins, and enter daily KPIs</p>
           </div>
-        );
+          <Tab.Group>
+            {/* Centered Tabs */}
+            <div className="w-full flex justify-center mb-8">
+              <Tab.List className="inline-flex bg-muted p-2 rounded-xl shadow-sm border border-border gap-2">
+                <Tab
+                  className={({ selected }) =>
+                    clsx(
+                      "px-8 py-2 rounded-lg font-semibold transition focus:outline-none text-lg",
+                      selected
+                        ? "bg-primary text-primary-foreground shadow"
+                        : "bg-card text-primary hover:bg-muted"
+                    )
+                  }
+                >
+                  Daily KPI Management
+                </Tab>
+                <Tab
+                  className={({ selected }) =>
+                    clsx(
+                      "px-8 py-2 rounded-lg font-semibold transition focus:outline-none text-lg",
+                      selected
+                        ? "bg-primary text-primary-foreground shadow"
+                        : "bg-card text-primary hover:bg-muted"
+                    )
+                  }
+                >
+                  Employee & Admin Adding
+                </Tab>
+              </Tab.List>
+            </div>
+            <Tab.Panels>
+              <Tab.Panel>{renderKPITab()}</Tab.Panel>
+              <Tab.Panel>{renderEmployeeAdminTab()}</Tab.Panel>
+            </Tab.Panels>
+          </Tab.Group>
+        </div>
+      </Layout>
+    </div>
+  );
 
 };
 
