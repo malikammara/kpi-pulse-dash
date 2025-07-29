@@ -270,7 +270,7 @@ const Dashboard: React.FC = () => {
       },
       {
         key: "out_house_meetings",
-        title: "Out-House",
+        title: "OH",
         achieved: totals.out_house_meetings,
         target: adjustedKpiTargets.out_house_meetings,
         weight: kpiWeights.out_house_meetings,
@@ -278,7 +278,7 @@ const Dashboard: React.FC = () => {
       },
       {
         key: "in_house_meetings",
-        title: "In-House",
+        title: "IH",
         achieved: totals.in_house_meetings,
         target: adjustedKpiTargets.in_house_meetings,
         weight: kpiWeights.in_house_meetings,
@@ -286,7 +286,7 @@ const Dashboard: React.FC = () => {
       },
       {
         key: "product_knowledge",
-        title: "Product Knowledge",
+        title: "Knowledge",
         achieved: totals.product_knowledge,
         target: adjustedKpiTargets.product_knowledge,
         weight: kpiWeights.product_knowledge,
