@@ -26,7 +26,8 @@ import {
 } from "recharts";
 import { useEmployees } from "@/hooks/useEmployees";
 import { useKPIData } from "@/hooks/useKPIData";
-import React, { useState, useMemo } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import React, { useState, useMemo, useEffect } from "react";
 
 // -- Helpers --
 function formatNumber(num: number | null | undefined): string {
@@ -112,7 +113,19 @@ const Dashboard: React.FC = () => {
   const currentYear = new Date().getFullYear();
   const [selectedYear] = useState(String(currentYear));
 
+  const { user, isAdmin } = useAuth();
   const { data: employees = [] } = useEmployees();
+  const myEmployee = useMemo(
+    () => employees.find((e) => e.email === user?.email),
+    [employees, user]
+  );
+
+  // Ensure non-admins cannot select other employees
+  useEffect(() => {
+    if (!isAdmin && selectedEmployee !== 'all' && selectedEmployee !== myEmployee?.id) {
+      setSelectedEmployee('all');
+    }
+  }, [isAdmin, selectedEmployee, myEmployee]);
   const { data: kpiData = [], isLoading } = useKPIData({
     employeeId: selectedEmployee === "all" ? undefined : selectedEmployee,
     month: selectedMonth,
@@ -372,11 +385,15 @@ const Dashboard: React.FC = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Employees</SelectItem>
-                {employees.map((employee: any) => (
-                  <SelectItem key={employee.id} value={employee.id}>
-                    {employee.name}
-                  </SelectItem>
-                ))}
+                {isAdmin
+                  ? employees.map((employee: any) => (
+                      <SelectItem key={employee.id} value={employee.id}>
+                        {employee.name}
+                      </SelectItem>
+                    ))
+                  : myEmployee && (
+                      <SelectItem value={myEmployee.id}>{myEmployee.name}</SelectItem>
+                    )}
               </SelectContent>
             </Select>
           </div>
