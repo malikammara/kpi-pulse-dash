@@ -40,7 +40,7 @@ const Auth = () => {
           <Button onClick={handleGoogleSignIn} disabled={loading}>
             {loading ? "Signing In..." : "Sign in with Google"}
           </Button>
-          <Link to="/dashboard">
+          <Link to="/">
             <Button variant="outline" className="w-full">
               Back to Main Dashboard
             </Button>
