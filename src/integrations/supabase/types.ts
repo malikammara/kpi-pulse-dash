@@ -35,6 +35,247 @@ export type Database = {
         }
         Relationships: []
       }
+        Row: {
+          account_number: string | null
+          account_opening_date: string
+          account_status: string | null
+          added_by: string | null
+          contact_id: string | null
+          created_at: string
+          current_margin: number | null
+          employee_id: string | null
+          id: string
+          initial_margin: number | null
+          margin_history: Json | null
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_number?: string | null
+          account_opening_date: string
+          account_status?: string | null
+          added_by?: string | null
+          contact_id?: string | null
+          created_at?: string
+          current_margin?: number | null
+          employee_id?: string | null
+          id?: string
+          initial_margin?: number | null
+          margin_history?: Json | null
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_number?: string | null
+          account_opening_date?: string
+          account_status?: string | null
+          added_by?: string | null
+          contact_id?: string | null
+          created_at?: string
+          current_margin?: number | null
+          employee_id?: string | null
+          id?: string
+          initial_margin?: number | null
+          margin_history?: Json | null
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_accounts_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_accounts_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contact_followups: {
+        Row: {
+          added_by: string | null
+          comments: string | null
+          completed: boolean | null
+          contact_id: string | null
+          created_at: string
+          employee_id: string | null
+          followup_date: string
+          id: string
+          next_followup_date: string | null
+          notification_sent: boolean | null
+          updated_at: string
+        }
+        Insert: {
+          added_by?: string | null
+          comments?: string | null
+          completed?: boolean | null
+          contact_id?: string | null
+          created_at?: string
+          employee_id?: string | null
+          followup_date: string
+          id?: string
+          next_followup_date?: string | null
+          notification_sent?: boolean | null
+          updated_at?: string
+        }
+        Update: {
+          added_by?: string | null
+          comments?: string | null
+          completed?: boolean | null
+          contact_id?: string | null
+          created_at?: string
+          employee_id?: string | null
+          followup_date?: string
+          id?: string
+          next_followup_date?: string | null
+          notification_sent?: boolean | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_followups_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_followups_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contact_meetings: {
+        Row: {
+          added_by: string | null
+          contact_id: string | null
+          created_at: string
+          duration_minutes: number | null
+          employee_id: string | null
+          follow_up_date: string | null
+          follow_up_required: boolean | null
+          id: string
+          meeting_date: string
+          meeting_type: string | null
+          next_steps: string | null
+          notes: string | null
+          outcome: string | null
+          updated_at: string
+        }
+        Insert: {
+          added_by?: string | null
+          contact_id?: string | null
+          created_at?: string
+          duration_minutes?: number | null
+          employee_id?: string | null
+          follow_up_date?: string | null
+          follow_up_required?: boolean | null
+          id?: string
+          meeting_date: string
+          meeting_type?: string | null
+          next_steps?: string | null
+          notes?: string | null
+          outcome?: string | null
+          updated_at?: string
+        }
+        Update: {
+          added_by?: string | null
+          contact_id?: string | null
+          created_at?: string
+          duration_minutes?: number | null
+          employee_id?: string | null
+          follow_up_date?: string | null
+          follow_up_required?: boolean | null
+          id?: string
+          meeting_date?: string
+          meeting_type?: string | null
+          next_steps?: string | null
+          notes?: string | null
+          outcome?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_meetings_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_meetings_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contacts: {
+        Row: {
+          added_by: string | null
+          category: string
+          company: string | null
+          created_at: string
+          email: string | null
+          employee_id: string | null
+          id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          position: string | null
+          source: string | null
+          updated_at: string
+        }
+        Insert: {
+          added_by?: string | null
+          category?: string
+          company?: string | null
+          created_at?: string
+          email?: string | null
+          employee_id?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          position?: string | null
+          source?: string | null
+          updated_at?: string
+        }
+        Update: {
+          added_by?: string | null
+          category?: string
+          company?: string | null
+          created_at?: string
+          email?: string | null
+          employee_id?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          position?: string | null
+          source?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employees: {
         Row: {
           added_by: string | null

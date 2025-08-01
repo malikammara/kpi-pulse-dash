@@ -7,6 +7,7 @@ import { AuthProvider } from "@/components/AuthProvider";
 import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import ManageKPIs from "./pages/ManageKPIs";
+import CRM from "./pages/CRM";
 import Auth from "./pages/Auth";
 import AdminGuard from "@/components/AdminGuard";
 import LoginGuard from "@/components/LoginGuard";
@@ -29,6 +30,14 @@ const App = () => (
               element={
                 <LoginGuard>
                   <Dashboard />
+                </LoginGuard>
+              } 
+            />
+            <Route 
+              path="/crm" 
+              element={
+                <LoginGuard>
+                  <CRM />
                 </LoginGuard>
               } 
             />

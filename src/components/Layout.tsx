@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, Home, Settings, Users, LogOut, User } from "lucide-react";
+import { BarChart3, Home, Settings, Users, LogOut, User, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -13,6 +13,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const navigation = [
     { name: "Home", href: "/", icon: Home },
     { name: "KPI Dashboard", href: "/dashboard", icon: BarChart3 },
+    { name: "CRM", href: "/crm", icon: UserCheck },
     { name: "Manage KPIs", href: "/manage", icon: Settings },
   ];
 
