@@ -22,6 +22,8 @@ const ManageKPIs = () => {
   const [selectedEmployee, setSelectedEmployee] = useState("");
   const [selectedMonth, setSelectedMonth] = useState((new Date().getMonth() + 1).toString());
   const [selectedDay, setSelectedDay] = useState(new Date().getDate().toString());
+  const [bulkSelectedMonth, setBulkSelectedMonth] = useState((new Date().getMonth() + 1).toString());
+  const [bulkSelectedDay, setBulkSelectedDay] = useState(new Date().getDate().toString());
   const [kpiValues, setKpiValues] = useState({
     margin: "",
     calls: "",
@@ -38,6 +40,9 @@ const ManageKPIs = () => {
   const [editRow, setEditRow] = useState(null);
   const [editValues, setEditValues] = useState({});
 
+  // Bulk management state
+  const [bulkKPIData, setBulkKPIData] = useState({});
+
   // Hooks
   const { data: employees = [] } = useEmployees();
   const { data: adminEmails = [] } = useAdminEmails();
@@ -47,6 +52,7 @@ const ManageKPIs = () => {
 
   const currentYear = new Date().getFullYear();
   const selectedDate = `${currentYear}-${selectedMonth.padStart(2, '0')}-${selectedDay.padStart(2, '0')}`;
+  const bulkSelectedDate = `${currentYear}-${bulkSelectedMonth.padStart(2, '0')}-${bulkSelectedDay.padStart(2, '0')}`;
 
   const { data: existingKPIData = [] } = useKPIData({
     employeeId: selectedEmployee,
@@ -54,7 +60,33 @@ const ManageKPIs = () => {
     year: currentYear.toString(),
   });
 
+  const { data: bulkExistingKPIData = [] } = useKPIData({
+    month: bulkSelectedMonth,
+    year: currentYear.toString(),
+  });
+
   const dayData = existingKPIData?.find(data => data.date === selectedDate);
+
+  // Initialize bulk data when employees or date changes
+  useEffect(() => {
+    const newBulkData = {};
+    employees.forEach(employee => {
+      const existingData = bulkExistingKPIData.find(data => 
+        data.employee_id === employee.id && data.date === bulkSelectedDate
+      );
+      newBulkData[employee.id] = {
+        margin: existingData?.margin?.toString() || "",
+        calls: existingData?.calls?.toString() || "",
+        leads_generated: existingData?.leads_generated?.toString() || "",
+        solo_closing: existingData?.solo_closing?.toString() || "",
+        out_house_meetings: existingData?.out_house_meetings?.toString() || "",
+        in_house_meetings: existingData?.in_house_meetings?.toString() || "",
+        product_knowledge: existingData?.product_knowledge?.toString() || "",
+        smd: existingData?.smd?.toString() || "",
+      };
+    });
+    setBulkKPIData(newBulkData);
+  }, [employees, bulkExistingKPIData, bulkSelectedDate]);
 
   // Auto-load KPI data when dropdowns or dayData changes
   useEffect(() => {
@@ -122,6 +154,38 @@ const ManageKPIs = () => {
         smd: "",
       });
     } catch {}
+  };
+
+  const handleBulkSave = async () => {
+    try {
+      const promises = Object.entries(bulkKPIData).map(([employeeId, data]) => {
+        return addKPIData.mutateAsync({
+          employee_id: employeeId,
+          date: bulkSelectedDate,
+          margin: parseFloat(data.margin) || 0,
+          calls: parseInt(data.calls) || 0,
+          leads_generated: parseInt(data.leads_generated) || 0,
+          solo_closing: parseInt(data.solo_closing) || 0,
+          out_house_meetings: parseInt(data.out_house_meetings) || 0,
+          in_house_meetings: parseInt(data.in_house_meetings) || 0,
+          product_knowledge: parseFloat(data.product_knowledge) || 0,
+          smd: parseFloat(data.smd) || 0,
+        });
+      });
+      await Promise.all(promises);
+    } catch (error) {
+      console.error('Error saving bulk KPI data:', error);
+    }
+  };
+
+  const handleBulkKPIChange = (employeeId, field, value) => {
+    setBulkKPIData(prev => ({
+      ...prev,
+      [employeeId]: {
+        ...prev[employeeId],
+        [field]: value
+      }
+    }));
   };
 
   const handleAddAdmin = async () => {
@@ -533,6 +597,161 @@ const ManageKPIs = () => {
     );
   };
 
+  // NEW: Bulk Management Tab
+  const renderBulkManagementTab = () => (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center space-x-2">
+          <BarChart3 className="h-5 w-5" />
+          <span>Bulk KPI Management</span>
+          <Badge variant="destructive">Admin Only</Badge>
+        </CardTitle>
+        <CardDescription>
+          Enter KPI data for all employees on a single day
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex gap-4 mb-6">
+          <div>
+            <Label>Month</Label>
+            <Select value={bulkSelectedMonth} onValueChange={setBulkSelectedMonth}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {months.map((month) => (
+                  <SelectItem key={month.value} value={month.value}>{month.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Day</Label>
+            <Select value={bulkSelectedDay} onValueChange={setBulkSelectedDay}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: 31 }, (_, i) => (
+                  <SelectItem key={i + 1} value={(i + 1).toString()}>
+                    {i + 1}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <p className="text-sm text-muted-foreground">
+            Selected Date: <span className="font-semibold">{bulkSelectedDate}</span>
+          </p>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm border">
+            <thead>
+              <tr className="bg-muted">
+                <th className="p-2 border text-left">Employee</th>
+                <th className="p-2 border">Margin</th>
+                <th className="p-2 border">Calls</th>
+                <th className="p-2 border">Leads</th>
+                <th className="p-2 border">Solo</th>
+                <th className="p-2 border">OH Mtgs</th>
+                <th className="p-2 border">IH Mtgs</th>
+                <th className="p-2 border">Knowledge %</th>
+                <th className="p-2 border">SMD %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employees.map((employee, idx) => (
+                <tr key={employee.id} className={idx % 2 ? "bg-muted/50" : ""}>
+                  <td className="p-2 border font-semibold">{employee.name}</td>
+                  <td className="p-2 border">
+                    <Input
+                      type="number"
+                      value={bulkKPIData[employee.id]?.margin || ""}
+                      onChange={e => handleBulkKPIChange(employee.id, "margin", e.target.value)}
+                      className="w-20"
+                    />
+                  </td>
+                  <td className="p-2 border">
+                    <Input
+                      type="number"
+                      value={bulkKPIData[employee.id]?.calls || ""}
+                      onChange={e => handleBulkKPIChange(employee.id, "calls", e.target.value)}
+                      className="w-20"
+                    />
+                  </td>
+                  <td className="p-2 border">
+                    <Input
+                      type="number"
+                      value={bulkKPIData[employee.id]?.leads_generated || ""}
+                      onChange={e => handleBulkKPIChange(employee.id, "leads_generated", e.target.value)}
+                      className="w-20"
+                    />
+                  </td>
+                  <td className="p-2 border">
+                    <Input
+                      type="number"
+                      value={bulkKPIData[employee.id]?.solo_closing || ""}
+                      onChange={e => handleBulkKPIChange(employee.id, "solo_closing", e.target.value)}
+                      className="w-20"
+                    />
+                  </td>
+                  <td className="p-2 border">
+                    <Input
+                      type="number"
+                      value={bulkKPIData[employee.id]?.out_house_meetings || ""}
+                      onChange={e => handleBulkKPIChange(employee.id, "out_house_meetings", e.target.value)}
+                      className="w-20"
+                    />
+                  </td>
+                  <td className="p-2 border">
+                    <Input
+                      type="number"
+                      value={bulkKPIData[employee.id]?.in_house_meetings || ""}
+                      onChange={e => handleBulkKPIChange(employee.id, "in_house_meetings", e.target.value)}
+                      className="w-20"
+                    />
+                  </td>
+                  <td className="p-2 border">
+                    <Input
+                      type="number"
+                      max="100"
+                      value={bulkKPIData[employee.id]?.product_knowledge || ""}
+                      onChange={e => handleBulkKPIChange(employee.id, "product_knowledge", e.target.value)}
+                      className="w-20"
+                    />
+                  </td>
+                  <td className="p-2 border">
+                    <Input
+                      type="number"
+                      max="100"
+                      value={bulkKPIData[employee.id]?.smd || ""}
+                      onChange={e => handleBulkKPIChange(employee.id, "smd", e.target.value)}
+                      className="w-20"
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex justify-end mt-6">
+          <Button 
+            onClick={handleBulkSave} 
+            className="bg-primary hover:bg-primary/80 text-primary-foreground"
+            disabled={addKPIData.isPending}
+          >
+            {addKPIData.isPending ? "Saving..." : "Save All KPI Data"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   // ----------------------- Layout -------------------------------
   return (
     <div className="min-h-screen bg-background">
@@ -582,12 +801,25 @@ const ManageKPIs = () => {
                 >
                   Daily KPI List
                 </Tab>
+                <Tab
+                  className={({ selected }) =>
+                    clsx(
+                      "px-8 py-2 rounded-lg font-semibold transition focus:outline-none text-lg",
+                      selected
+                        ? "bg-primary text-primary-foreground shadow"
+                        : "bg-card text-primary hover:bg-muted"
+                    )
+                  }
+                >
+                  Bulk Management
+                </Tab>
               </Tab.List>
             </div>
             <Tab.Panels>
               <Tab.Panel>{renderKPITab()}</Tab.Panel>
               <Tab.Panel>{renderEmployeeAdminTab()}</Tab.Panel>
               <Tab.Panel>{renderKPIListTab()}</Tab.Panel>
+              <Tab.Panel>{renderBulkManagementTab()}</Tab.Panel>
             </Tab.Panels>
           </Tab.Group>
         </div>
