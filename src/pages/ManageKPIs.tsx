@@ -134,7 +134,7 @@ const ManageKPIs = () => {
       await addKPIData.mutateAsync({
         employee_id: selectedEmployee,
         date: selectedDate,
-        margin: parseFloat(kpiValues.margin) || 0,
+        margin: parseFloat(kpiValues.margin.replace(/,/g, '')) || 0,
         calls: parseInt(kpiValues.calls) || 0,
         leads_generated: parseInt(kpiValues.leads_generated) || 0,
         solo_closing: parseInt(kpiValues.solo_closing) || 0,
@@ -322,9 +322,13 @@ const ManageKPIs = () => {
             <Input
               id="margin"
               placeholder="0"
-              type="number"
+              type="text"
               value={kpiValues.margin}
-              onChange={e => setKpiValues(val => ({ ...val, margin: e.target.value }))}
+              onChange={e => {
+                const rawValue = e.target.value.replace(/,/g, '').replace(/[^0-9.]/g, '');
+                const formattedValue = rawValue.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                setKpiValues(val => ({ ...val, margin: formattedValue }));
+              }}
             />
           </div>
           <div>

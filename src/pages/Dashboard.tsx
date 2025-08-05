@@ -104,7 +104,11 @@ const ProgressBar = ({ value }: { value: number }) => (
 // -- Main Component --
 const Dashboard: React.FC = () => {
   const [selectedEmployee, setSelectedEmployee] = useState("all");
-  const [selectedMonth, setSelectedMonth] = useState("7");
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+  const currentMonth = new Date().getMonth() + 1;
+    return currentMonth.toString();
+  });
+
   const [selectedViewType, setSelectedViewType] = useState("Monthly");
   const [selectedWeek, setSelectedWeek] = useState("1");
   const [selectedDay, setSelectedDay] = useState(

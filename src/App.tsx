@@ -33,14 +33,6 @@ const App = () => (
                 </LoginGuard>
               } 
             />
-            <Route 
-              path="/crm" 
-              element={
-                <LoginGuard>
-                  <CRM />
-                </LoginGuard>
-              } 
-            />
             <Route path="/manage" element={
               <AdminGuard>
                 <ManageKPIs />

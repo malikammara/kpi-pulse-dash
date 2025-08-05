@@ -13,7 +13,6 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
   const navigation = [
     { name: "Home", href: "/", icon: Home },
     { name: "KPI Dashboard", href: "/dashboard", icon: BarChart3 },
-    { name: "CRM", href: "/crm", icon: UserCheck },
     { name: "Manage KPIs", href: "/manage", icon: Settings },
   ];
 
