@@ -8,6 +8,7 @@ import Index from "./pages/Index";
 import Dashboard from "./pages/Dashboard";
 import ManageKPIs from "./pages/ManageKPIs";
 import CRM from "./pages/CRM";
+import TeamPerformance from "./pages/TeamPerformance";
 import Auth from "./pages/Auth";
 import AdminGuard from "@/components/AdminGuard";
 import LoginGuard from "@/components/LoginGuard";
@@ -33,10 +34,23 @@ const App = () => (
                 </LoginGuard>
               } 
             />
+            <Route 
+              path="/team-performance" 
+              element={
+                <LoginGuard>
+                  <TeamPerformance />
+                </LoginGuard>
+              } 
+            />
             <Route path="/manage" element={
               <AdminGuard>
                 <ManageKPIs />
               </AdminGuard>
+            } />
+            <Route path="/crm" element={
+              <LoginGuard>
+                <CRM />
+              </LoginGuard>
             } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
