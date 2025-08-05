@@ -149,8 +149,10 @@ const CRM = () => {
     { value: "will_show_meeting", label: "Will Show Meeting", color: "bg-indigo-100 text-indigo-800" },
     { value: "meeting_done", label: "Meeting Done", color: "bg-teal-100 text-teal-800" },
     { value: "account_opened", label: "Account Opened", color: "bg-emerald-100 text-emerald-800" }
-    const targetEmployeeId = isAdmin && selectedEmployee !== "all" ? selectedEmployee : myEmployee?.id;
-    if (!targetEmployeeId) return;
+  ];
+  
+  const targetEmployeeId = isAdmin && selectedEmployee !== "all" ? selectedEmployee : myEmployee?.id;
+  if (!targetEmployeeId) return;
 
   const getCategoryBadge = (category: string) => {
     const option = categoryOptions.find(opt => opt.value === category);
