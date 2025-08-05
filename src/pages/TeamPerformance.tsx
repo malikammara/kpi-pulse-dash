@@ -11,6 +11,8 @@ import {
   ResponsiveContainer,
   Tooltip,
   Legend,
+  Cell,
+  ReferenceLine,
 } from "recharts";
 import { useKPIData } from "@/hooks/useKPIData";
 import React, { useState, useMemo } from "react";
@@ -19,7 +21,7 @@ import { format } from "date-fns";
 const TeamPerformance: React.FC = () => {
   const [selectedKPI, setSelectedKPI] = useState("margin");
   const currentYear = new Date().getFullYear();
-  
+
   const { data: kpiData = [], isLoading } = useKPIData({
     year: currentYear.toString(),
   });
@@ -37,17 +39,17 @@ const TeamPerformance: React.FC = () => {
 
   const selectedKPIInfo = kpiOptions.find(kpi => kpi.value === selectedKPI);
 
-  // Process data for monthly aggregation
+  // Aggregate monthly data and fill missing months with zeros
   const monthlyData = useMemo(() => {
     if (!kpiData.length) return [];
 
-    const monthlyAggregation = {};
-    
+    const monthlyAggregation: Record<string, any> = {};
+
     kpiData.forEach((record: any) => {
       const date = new Date(record.date);
       const monthKey = format(date, 'yyyy-MM');
       const monthLabel = format(date, 'MMM yyyy');
-      
+
       if (!monthlyAggregation[monthKey]) {
         monthlyAggregation[monthKey] = {
           month: monthLabel,
@@ -64,44 +66,91 @@ const TeamPerformance: React.FC = () => {
         };
       }
 
-      // Sum up values for most KPIs
       monthlyAggregation[monthKey].margin += record.margin || 0;
       monthlyAggregation[monthKey].calls += record.calls || 0;
       monthlyAggregation[monthKey].leads_generated += record.leads_generated || 0;
       monthlyAggregation[monthKey].solo_closing += record.solo_closing || 0;
       monthlyAggregation[monthKey].out_house_meetings += record.out_house_meetings || 0;
       monthlyAggregation[monthKey].in_house_meetings += record.in_house_meetings || 0;
-      
-      // For percentage-based KPIs, we'll calculate average
+
       monthlyAggregation[monthKey].product_knowledge += record.product_knowledge || 0;
       monthlyAggregation[monthKey].smd += record.smd || 0;
       monthlyAggregation[monthKey].recordCount += 1;
     });
 
-    // Convert to array and calculate averages for percentage KPIs
-    const result = Object.values(monthlyAggregation).map((month: any) => ({
-      ...month,
-      product_knowledge: month.recordCount > 0 ? Math.round(month.product_knowledge / month.recordCount) : 0,
-      smd: month.recordCount > 0 ? Math.round(month.smd / month.recordCount) : 0,
-    }));
+    const allMonths = [];
+    const now = new Date();
+    const currentMonth = now.getMonth();
 
-    // Sort by month
-    return result.sort((a, b) => a.monthKey.localeCompare(b.monthKey));
-  }, [kpiData]);
+    for (let m = 0; m <= currentMonth; m++) {
+      const date = new Date(currentYear, m, 1);
+      const monthKey = format(date, 'yyyy-MM');
+      const monthLabel = format(date, 'MMM yyyy');
+      allMonths.push({ monthKey, monthLabel });
+    }
 
-  // Calculate total for the selected KPI
+    const result = allMonths.map(({ monthKey, monthLabel }) => {
+      if (monthlyAggregation[monthKey]) {
+        const month = monthlyAggregation[monthKey];
+        return {
+          ...month,
+          product_knowledge: month.recordCount > 0 ? Math.round(month.product_knowledge / month.recordCount) : 0,
+          smd: month.recordCount > 0 ? Math.round(month.smd / month.recordCount) : 0,
+        };
+      } else {
+        return {
+          month: monthLabel,
+          monthKey,
+          margin: 0,
+          calls: 0,
+          leads_generated: 0,
+          solo_closing: 0,
+          out_house_meetings: 0,
+          in_house_meetings: 0,
+          product_knowledge: 0,
+          smd: 0,
+          recordCount: 0,
+        };
+      }
+    });
+
+    return result;
+  }, [kpiData, currentYear]);
+
+  // Calculate average per month for selected KPI
+  const averageValue = useMemo(() => {
+    if (!monthlyData.length) return 0;
+
+    if (selectedKPI === 'product_knowledge' || selectedKPI === 'smd') {
+      const sum = monthlyData.reduce((acc, month) => acc + month[selectedKPI], 0);
+      return sum / monthlyData.length;
+    } else {
+      return monthlyData.reduce((acc, month) => acc + month[selectedKPI], 0) / monthlyData.length;
+    }
+  }, [monthlyData, selectedKPI]);
+
+  // Calculate total value for display (slightly different than averageValue for some KPIs)
   const totalValue = useMemo(() => {
     if (!monthlyData.length) return 0;
-    
+
     if (selectedKPI === 'product_knowledge' || selectedKPI === 'smd') {
-      // For percentage KPIs, show average
       const sum = monthlyData.reduce((acc, month) => acc + month[selectedKPI], 0);
       return Math.round(sum / monthlyData.length);
     } else {
-      // For other KPIs, show total
       return monthlyData.reduce((acc, month) => acc + month[selectedKPI], 0);
     }
   }, [monthlyData, selectedKPI]);
+
+  // Add barColor property to each month based on comparison with averageValue
+  const monthlyDataWithColors = useMemo(() => {
+    return monthlyData.map(month => {
+      let barColor = 'gray';
+      if (month[selectedKPI] > averageValue) barColor = 'green';
+      else if (month[selectedKPI] < averageValue) barColor = 'red';
+
+      return { ...month, barColor };
+    });
+  }, [monthlyData, averageValue, selectedKPI]);
 
   const formatValue = (value: number) => {
     if (selectedKPI === 'margin') {
@@ -144,7 +193,7 @@ const TeamPerformance: React.FC = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {kpiOptions.map((kpi) => (
+                      {kpiOptions.map(kpi => (
                         <SelectItem key={kpi.value} value={kpi.value}>
                           {kpi.label}
                         </SelectItem>
@@ -178,7 +227,7 @@ const TeamPerformance: React.FC = () => {
               <div className="h-96 flex items-center justify-center">
                 <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
               </div>
-            ) : monthlyData.length === 0 ? (
+            ) : monthlyDataWithColors.length === 0 ? (
               <div className="h-96 flex items-center justify-center">
                 <div className="text-center">
                   <p className="text-muted-foreground text-lg">No data available</p>
@@ -190,22 +239,25 @@ const TeamPerformance: React.FC = () => {
             ) : (
               <div className="h-96">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthlyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <BarChart
+                    data={monthlyDataWithColors}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                  >
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis 
-                      dataKey="month" 
+                    <XAxis
+                      dataKey="month"
                       tick={{ fontSize: 12 }}
                       angle={-45}
                       textAnchor="end"
                       height={80}
                     />
-                    <YAxis 
+                    <YAxis
                       tickFormatter={formatValue}
                       tick={{ fontSize: 12 }}
                     />
                     <Tooltip
                       formatter={(value: number) => [formatTooltipValue(value), selectedKPIInfo?.label]}
-                      labelFormatter={(label) => `Month: ${label}`}
+                      labelFormatter={label => `Month: ${label}`}
                       contentStyle={{
                         backgroundColor: 'hsl(var(--card))',
                         border: '1px solid hsl(var(--border))',
@@ -213,12 +265,17 @@ const TeamPerformance: React.FC = () => {
                       }}
                     />
                     <Legend />
-                    <Bar 
-                      dataKey={selectedKPI} 
-                      fill="hsl(var(--primary))"
-                      name={selectedKPIInfo?.label}
-                      radius={[4, 4, 0, 0]}
+                    <ReferenceLine
+                      y={averageValue}
+                      stroke="blue"
+                      strokeDasharray="3 3"
+                      label="Average"
                     />
+                    <Bar dataKey={selectedKPI} radius={[4, 4, 0, 0]}>
+                      {monthlyDataWithColors.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.barColor} />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -234,7 +291,7 @@ const TeamPerformance: React.FC = () => {
                 <div className="text-center">
                   <p className="text-sm text-muted-foreground">Best Month</p>
                   <p className="text-2xl font-bold text-primary mt-2">
-                    {monthlyData.reduce((best, current) => 
+                    {monthlyData.reduce((best, current) =>
                       current[selectedKPI] > best[selectedKPI] ? current : best
                     ).month}
                   </p>
