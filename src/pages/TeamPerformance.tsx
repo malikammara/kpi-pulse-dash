@@ -241,19 +241,21 @@ const TeamPerformance: React.FC = () => {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     data={monthlyDataWithColors}
-                    margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                    margin={{ top: 20, right: 40, left: 30, bottom: 90 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" />
+                    <CartesianGrid stroke="#eee" strokeDasharray="4 4" />
                     <XAxis
                       dataKey="month"
                       tick={{ fontSize: 12 }}
                       angle={-45}
                       textAnchor="end"
-                      height={80}
+                      height={90}
+                      interval={0}
                     />
                     <YAxis
                       tickFormatter={formatValue}
-                      tick={{ fontSize: 12 }}
+                      tick={{ fontSize: 12, fill: '#555' }}
+                      width={60}
                     />
                     <Tooltip
                       formatter={(value: number) => [formatTooltipValue(value), selectedKPIInfo?.label]}
@@ -262,16 +264,18 @@ const TeamPerformance: React.FC = () => {
                         backgroundColor: 'hsl(var(--card))',
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px',
+                        padding: '10px',
+                        boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
                       }}
                     />
-                    <Legend />
+                    <Legend verticalAlign="top" height={36} />
                     <ReferenceLine
                       y={averageValue}
                       stroke="blue"
                       strokeDasharray="3 3"
-                      label={`Average ${averageValue}`}
+                      label={`Average ${formatValue(averageValue)}`}
                     />
-                    <Bar dataKey={selectedKPI} radius={[4, 4, 0, 0]}>
+                    <Bar dataKey={selectedKPI} radius={[6, 6, 0, 0]} maxBarSize={40}>
                       {monthlyDataWithColors.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.barColor} />
                       ))}
