@@ -166,6 +166,25 @@ const TeamPerformance: React.FC = () => {
     return `${value.toLocaleString()}${selectedKPIInfo?.unit || ''}`;
   };
 
+  const AvgLabel = (props) => {
+    const { x, y, width, value } = props;
+    return (
+      <foreignObject x={x + 5} y={y - 20} width={100} height={30}>
+        <div style={{
+          backgroundColor: 'white',
+          padding: '2px 6px',
+          borderRadius: 4,
+          fontWeight: 'bold',
+          color: 'blue',
+          fontSize: 12,
+          boxShadow: '0 0 4px rgba(0,0,0,0.1)'
+        }}>
+          {value}
+        </div>
+      </foreignObject>
+    );
+  };
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -273,7 +292,7 @@ const TeamPerformance: React.FC = () => {
                       y={averageValue}
                       stroke="blue"
                       strokeDasharray="3 3"
-                      label={`Average ${formatValue(averageValue)}`}
+                      label={<AvgLabel value={`Average ${formatValue(averageValue)}`} />}
                     />
                     <Bar dataKey={selectedKPI} radius={[6, 6, 0, 0]} maxBarSize={40}>
                       {monthlyDataWithColors.map((entry, index) => (
