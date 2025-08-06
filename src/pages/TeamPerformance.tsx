@@ -269,7 +269,7 @@ const TeamPerformance: React.FC = () => {
                       y={averageValue}
                       stroke="blue"
                       strokeDasharray="3 3"
-                      label="Average"
+                      label={`Average ${averageValue}`}
                     />
                     <Bar dataKey={selectedKPI} radius={[4, 4, 0, 0]}>
                       {monthlyDataWithColors.map((entry, index) => (
