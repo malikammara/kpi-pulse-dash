@@ -188,7 +188,7 @@ const Dashboard: React.FC = () => {
     ? workingDaysInPeriod / workingDaysInMonth
     : 1;
     const employeeMultiplier =
-  selectedEmployee === "all" ? employees.length : 1;
+  selectedEmployee === "all" ? employees.length-2 : 1;
 
   const adjustedKpiTargets = Object.fromEntries(
     Object.entries(kpiTargets).map(([k, v]) => [
