@@ -225,101 +225,65 @@ const Dashboard: React.FC = () => {
   }, [kpiData, selectedMonth, selectedWeek, selectedDay, selectedViewType, selectedYear]);
 
   // AGGREGATE KPI DATA
-  const aggregatedKPIs = useMemo(() => {
-    const totals = filteredKpiData.reduce(
-      (acc: any, record: any) => {
-        acc.margin += record.margin || 0;
-        acc.calls += record.calls || 0;
-        acc.leads_generated += record.leads_generated || 0;
-        acc.solo_closing += record.solo_closing || 0;
-        acc.out_house_meetings += record.out_house_meetings || 0;
-        acc.in_house_meetings += record.in_house_meetings || 0;
-        acc.product_knowledge = Math.max(
-          acc.product_knowledge,
-          record.product_knowledge || 0
-        );
-        acc.smd = Math.max(acc.smd, record.smd || 0);
-        return acc;
-      },
-      {
+    const aggregatedKPIs = useMemo(() => {
+      // Sums for count KPIs
+      const totals = {
         margin: 0,
         calls: 0,
         leads_generated: 0,
         solo_closing: 0,
         out_house_meetings: 0,
         in_house_meetings: 0,
-        product_knowledge: 0,
-        smd: 0,
-      }
-    );
-    return [
-      {
-        key: "margin",
-        title: "Margin",
-        achieved: totals.margin,
-        target: adjustedKpiTargets.margin,
-        weight: kpiWeights.margin,
-        unit: "",
-      },
-      {
-        key: "calls",
-        title: "Calls",
-        achieved: totals.calls,
-        target: adjustedKpiTargets.calls,
-        weight: kpiWeights.calls,
-        unit: "",
-      },
-      {
-        key: "leads_generated",
-        title: "Leads",
-        achieved: totals.leads_generated,
-        target: adjustedKpiTargets.leads_generated,
-        weight: kpiWeights.leads_generated,
-        unit: "",
-      },
-      {
-        key: "solo_closing",
-        title: "Solo",
-        achieved: totals.solo_closing,
-        target: adjustedKpiTargets.solo_closing,
-        weight: kpiWeights.solo_closing,
-        unit: "",
-      },
-      {
-        key: "out_house_meetings",
-        title: "OH",
-        achieved: totals.out_house_meetings,
-        target: adjustedKpiTargets.out_house_meetings,
-        weight: kpiWeights.out_house_meetings,
-        unit: "",
-      },
-      {
-        key: "in_house_meetings",
-        title: "IH",
-        achieved: totals.in_house_meetings,
-        target: adjustedKpiTargets.in_house_meetings,
-        weight: kpiWeights.in_house_meetings,
-        unit: "",
-      },
-      {
-        key: "product_knowledge",
-        title: "Knowledge",
-        achieved: totals.product_knowledge,
-        target: adjustedKpiTargets.product_knowledge,
-        weight: kpiWeights.product_knowledge,
-        unit: "%",
-      },
-      {
-        key: "smd",
-        title: "SMD",
-        achieved: totals.smd,
-        target: adjustedKpiTargets.smd,
-        weight: kpiWeights.smd,
-        unit: "%",
-      },
-    ];
-  }, [filteredKpiData, adjustedKpiTargets]);
+      };
 
+      // Track per-employee MAX within the period for % KPIs (avoid double-counting days)
+      const knowledgeByEmp = new Map<string, number>();
+      const smdByEmp = new Map<string, number>();
+
+      filteredKpiData.forEach((record: any) => {
+        totals.margin += record.margin || 0;
+        totals.calls += record.calls || 0;
+        totals.leads_generated += record.leads_generated || 0;
+        totals.solo_closing += record.solo_closing || 0;
+        totals.out_house_meetings += record.out_house_meetings || 0;
+        totals.in_house_meetings += record.in_house_meetings || 0;
+
+        const empId =
+          record.employeeId ??
+          record.employee_id ??
+          record.empId ??
+          record.emp_id ??
+          "unknown";
+
+        if (record.product_knowledge != null) {
+          const prev = knowledgeByEmp.get(empId) ?? 0;
+          knowledgeByEmp.set(empId, Math.max(prev, Number(record.product_knowledge)));
+        }
+        if (record.smd != null) {
+          const prev = smdByEmp.get(empId) ?? 0;
+          smdByEmp.set(empId, Math.max(prev, Number(record.smd)));
+        }
+      });
+
+      // Sum across employees (for "all"), equals single value when one employee is selected
+      const sumValues = (m: Map<string, number>) =>
+        Array.from(m.values()).reduce((a, b) => a + b, 0);
+
+      const product_knowledge = sumValues(knowledgeByEmp);
+      const smd = sumValues(smdByEmp);
+
+      return [
+        { key: "margin", title: "Margin", achieved: totals.margin, target: adjustedKpiTargets.margin, weight: kpiWeights.margin, unit: "" },
+        { key: "calls", title: "Calls", achieved: totals.calls, target: adjustedKpiTargets.calls, weight: kpiWeights.calls, unit: "" },
+        { key: "leads_generated", title: "Leads", achieved: totals.leads_generated, target: adjustedKpiTargets.leads_generated, weight: kpiWeights.leads_generated, unit: "" },
+        { key: "solo_closing", title: "Solo", achieved: totals.solo_closing, target: adjustedKpiTargets.solo_closing, weight: kpiWeights.solo_closing, unit: "" },
+        { key: "out_house_meetings", title: "OH", achieved: totals.out_house_meetings, target: adjustedKpiTargets.out_house_meetings, weight: kpiWeights.out_house_meetings, unit: "" },
+        { key: "in_house_meetings", title: "IH", achieved: totals.in_house_meetings, target: adjustedKpiTargets.in_house_meetings, weight: kpiWeights.in_house_meetings, unit: "" },
+        { key: "product_knowledge", title: "Knowledge", achieved: product_knowledge, target: adjustedKpiTargets.product_knowledge, weight: kpiWeights.product_knowledge, unit: "%" },
+        { key: "smd", title: "SMD", achieved: smd, target: adjustedKpiTargets.smd, weight: kpiWeights.smd, unit: "%" },
+      ];
+      // NOTE: add selectedEmployee if you reference it, but here sum works for both single and all
+    }, [filteredKpiData, adjustedKpiTargets, kpiWeights]);
   // Weighted score
   const overallScore = useMemo(() => {
     const weightedSum = aggregatedKPIs.reduce((sum, kpi) => {
