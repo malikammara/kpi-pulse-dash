@@ -191,11 +191,13 @@ const Dashboard: React.FC = () => {
   selectedEmployee === "all" ? employees.length-2 : 1;
 
   const adjustedKpiTargets = Object.fromEntries(
-    Object.entries(kpiTargets).map(([k, v]) => [
-      k,
-      Math.round(v * periodMultiplier * employeeMultiplier),
-    ])
+    Object.entries(kpiTargets).map(([k, v]) => {
+      const monthlyOnly = k === "product_knowledge" || k === "smd";
+      const multiplier = (monthlyOnly ? 1 : periodMultiplier) * employeeMultiplier;
+      return [k, Math.round(v * multiplier)];
+    })
   );
+
 
   // FILTER KPI DATA
   const filteredKpiData = useMemo(() => {
@@ -223,67 +225,79 @@ const Dashboard: React.FC = () => {
     }
     return kpiData;
   }, [kpiData, selectedMonth, selectedWeek, selectedDay, selectedViewType, selectedYear]);
+  // Always-Monthly slice (ignore selectedViewType)
+  const monthlyKpiData = useMemo(() => {
+    if (!kpiData.length) return [];
+    return kpiData.filter(
+      (rec: any) =>
+        new Date(rec.date).getMonth() + 1 === Number(selectedMonth) &&
+        new Date(rec.date).getFullYear() === Number(selectedYear)
+    );
+  }, [kpiData, selectedMonth, selectedYear]);
 
   // AGGREGATE KPI DATA
-    const aggregatedKPIs = useMemo(() => {
-      // Sums for count KPIs
-      const totals = {
-        margin: 0,
-        calls: 0,
-        leads_generated: 0,
-        solo_closing: 0,
-        out_house_meetings: 0,
-        in_house_meetings: 0,
-      };
+  const aggregatedKPIs = useMemo(() => {
+    // Sums for count KPIs (respect Weekly/Daily/Monthly selection)
+    const totals = {
+      margin: 0,
+      calls: 0,
+      leads_generated: 0,
+      solo_closing: 0,
+      out_house_meetings: 0,
+      in_house_meetings: 0,
+    };
 
-      // Track per-employee MAX within the period for % KPIs (avoid double-counting days)
-      const knowledgeByEmp = new Map<string, number>();
-      const smdByEmp = new Map<string, number>();
+    // --- 3a) Count KPIs from filteredKpiData (unchanged behavior) ---
+    filteredKpiData.forEach((record: any) => {
+      totals.margin += record.margin || 0;
+      totals.calls += record.calls || 0;
+      totals.leads_generated += record.leads_generated || 0;
+      totals.solo_closing += record.solo_closing || 0;
+      totals.out_house_meetings += record.out_house_meetings || 0;
+      totals.in_house_meetings += record.in_house_meetings || 0;
+    });
 
-      filteredKpiData.forEach((record: any) => {
-        totals.margin += record.margin || 0;
-        totals.calls += record.calls || 0;
-        totals.leads_generated += record.leads_generated || 0;
-        totals.solo_closing += record.solo_closing || 0;
-        totals.out_house_meetings += record.out_house_meetings || 0;
-        totals.in_house_meetings += record.in_house_meetings || 0;
+    // --- 3b) % KPIs (Knowledge, SMD) from MONTHLY data regardless of view ---
+    const knowledgeByEmp = new Map<string, number>();
+    const smdByEmp = new Map<string, number>();
 
-        const empId =
-          record.employeeId ??
-          record.employee_id ??
-          record.empId ??
-          record.emp_id ??
-          "unknown";
+    monthlyKpiData.forEach((record: any) => {
+      const empId =
+        record.employeeId ??
+        record.employee_id ??
+        record.empId ??
+        record.emp_id ??
+        "unknown";
 
-        if (record.product_knowledge != null) {
-          const prev = knowledgeByEmp.get(empId) ?? 0;
-          knowledgeByEmp.set(empId, Math.max(prev, Number(record.product_knowledge)));
-        }
-        if (record.smd != null) {
-          const prev = smdByEmp.get(empId) ?? 0;
-          smdByEmp.set(empId, Math.max(prev, Number(record.smd)));
-        }
-      });
+      if (record.product_knowledge != null) {
+        const prev = knowledgeByEmp.get(empId) ?? 0;
+        knowledgeByEmp.set(empId, Math.max(prev, Number(record.product_knowledge)));
+      }
+      if (record.smd != null) {
+        const prev = smdByEmp.get(empId) ?? 0;
+        smdByEmp.set(empId, Math.max(prev, Number(record.smd)));
+      }
+    });
 
-      // Sum across employees (for "all"), equals single value when one employee is selected
-      const sumValues = (m: Map<string, number>) =>
-        Array.from(m.values()).reduce((a, b) => a + b, 0);
+    const sumValues = (m: Map<string, number>) =>
+      Array.from(m.values()).reduce((a, b) => a + b, 0);
 
-      const product_knowledge = sumValues(knowledgeByEmp);
-      const smd = sumValues(smdByEmp);
+    const product_knowledge = sumValues(knowledgeByEmp);
+    const smd = sumValues(smdByEmp);
 
-      return [
-        { key: "margin", title: "Margin", achieved: totals.margin, target: adjustedKpiTargets.margin, weight: kpiWeights.margin, unit: "" },
-        { key: "calls", title: "Calls", achieved: totals.calls, target: adjustedKpiTargets.calls, weight: kpiWeights.calls, unit: "" },
-        { key: "leads_generated", title: "Leads", achieved: totals.leads_generated, target: adjustedKpiTargets.leads_generated, weight: kpiWeights.leads_generated, unit: "" },
-        { key: "solo_closing", title: "Solo", achieved: totals.solo_closing, target: adjustedKpiTargets.solo_closing, weight: kpiWeights.solo_closing, unit: "" },
-        { key: "out_house_meetings", title: "OH", achieved: totals.out_house_meetings, target: adjustedKpiTargets.out_house_meetings, weight: kpiWeights.out_house_meetings, unit: "" },
-        { key: "in_house_meetings", title: "IH", achieved: totals.in_house_meetings, target: adjustedKpiTargets.in_house_meetings, weight: kpiWeights.in_house_meetings, unit: "" },
-        { key: "product_knowledge", title: "Knowledge", achieved: product_knowledge, target: adjustedKpiTargets.product_knowledge, weight: kpiWeights.product_knowledge, unit: "%" },
-        { key: "smd", title: "SMD", achieved: smd, target: adjustedKpiTargets.smd, weight: kpiWeights.smd, unit: "%" },
-      ];
-      // NOTE: add selectedEmployee if you reference it, but here sum works for both single and all
-    }, [filteredKpiData, adjustedKpiTargets, kpiWeights]);
+    return [
+      { key: "margin",             title: "Margin",  achieved: totals.margin,              target: adjustedKpiTargets.margin,             weight: kpiWeights.margin,             unit: ""  },
+      { key: "calls",              title: "Calls",   achieved: totals.calls,               target: adjustedKpiTargets.calls,              weight: kpiWeights.calls,              unit: ""  },
+      { key: "leads_generated",    title: "Leads",   achieved: totals.leads_generated,     target: adjustedKpiTargets.leads_generated,    weight: kpiWeights.leads_generated,    unit: ""  },
+      { key: "solo_closing",       title: "Solo",    achieved: totals.solo_closing,        target: adjustedKpiTargets.solo_closing,       weight: kpiWeights.solo_closing,       unit: ""  },
+      { key: "out_house_meetings", title: "OH",      achieved: totals.out_house_meetings,  target: adjustedKpiTargets.out_house_meetings, weight: kpiWeights.out_house_meetings, unit: ""  },
+      { key: "in_house_meetings",  title: "IH",      achieved: totals.in_house_meetings,   target: adjustedKpiTargets.in_house_meetings,  weight: kpiWeights.in_house_meetings,  unit: ""  },
+      // % KPIs use monthly-only achieved + monthly-only target (no period scaling)
+      { key: "product_knowledge",  title: "Knowledge", achieved: product_knowledge, target: adjustedKpiTargets.product_knowledge, weight: kpiWeights.product_knowledge, unit: "%" },
+      { key: "smd",                title: "SMD",       achieved: smd,              target: adjustedKpiTargets.smd,              weight: kpiWeights.smd,              unit: "%" },
+    ];
+  }, [filteredKpiData, monthlyKpiData, adjustedKpiTargets, kpiWeights]);
+
   // Weighted score
   const overallScore = useMemo(() => {
     const weightedSum = aggregatedKPIs.reduce((sum, kpi) => {
