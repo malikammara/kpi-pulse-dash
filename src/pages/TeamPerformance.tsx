@@ -48,7 +48,7 @@ const TeamPerformance: React.FC = () => {
   const workingDaysInfo = useMemo(() => {
     const year = currentYear;
     const month = currentMonth;
-    
+    setMonthlyTarget(100000000);
     // Total working days in month
     let totalWorkingDays = 0;
     let passedWorkingDays = 0;
@@ -487,7 +487,7 @@ const TeamPerformance: React.FC = () => {
             </div>
 
             {/* Target Setting */}
-            <Card className="shadow-sm">
+            <Card className="shadow-sm ">
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
                   <Target className="h-5 w-5" />
