@@ -35,14 +35,23 @@ const TeamPerformance: React.FC = () => {
     year: currentYear.toString(),
   });
 
-  // Current month's margin data
+  // Current month's data
   const currentMonthMarginData = useMemo(() => {
     return kpiData.filter((record: any) => {
       const recordDate = new Date(record.date);
-      return recordDate.getMonth() + 1 === currentMonth &&
-        recordDate.getFullYear() === currentYear;
+      return recordDate.getMonth() + 1 === currentMonth && recordDate.getFullYear() === currentYear;
     });
   }, [kpiData, currentMonth, currentYear]);
+
+  // 🔧 FIX: Aggregate margin by date (sum of all employees for the day)
+  const marginByDate = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of currentMonthMarginData) {
+      const key = r.date; // 'YYYY-MM-DD'
+      map.set(key, (map.get(key) || 0) + (r.margin || 0));
+    }
+    return map;
+  }, [currentMonthMarginData]);
 
   // Working days (Mon–Fri)
   const workingDaysInfo = useMemo(() => {
@@ -112,13 +121,11 @@ const TeamPerformance: React.FC = () => {
       const dayOfWeek = date.getDay();
 
       if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-        const dateStr = `${year}-${month.toString().padStart(2, "0")}-${day
-          .toString()
-          .padStart(2, "0")}`;
-        const dayData = currentMonthMarginData.find(
-          (record: any) => record.date === dateStr
-        );
-        const achieved = dayData?.margin || 0;
+        const dateStr = `${year}-${month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+
+        // 🔧 FIX applied here: use aggregated margin for the date
+        const achieved = marginByDate.get(dateStr) ?? 0;
+
         const isToday = day === currentDate;
         const isPast = day < currentDate;
         const isFuture = day > currentDate;
@@ -153,6 +160,7 @@ const TeamPerformance: React.FC = () => {
     currentYear,
     currentMonth,
     currentDate,
+    marginByDate, // ensure recompute when aggregation changes
   ]);
 
   const kpiOptions = [
