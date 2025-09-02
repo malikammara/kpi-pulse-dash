@@ -17,16 +17,16 @@ import {
 import { useKPIData } from "@/hooks/useKPIData";
 import React, { useState, useMemo } from "react";
 import { format } from "date-fns";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Target, TrendingUp, Calendar, AlertTriangle } from "lucide-react";
 
 const TeamPerformance: React.FC = () => {
   const [selectedKPI, setSelectedKPI] = useState("margin");
-  const [monthlyTarget, setMonthlyTarget] = useState("");
-  const [savedTarget, setSavedTarget] = useState(0);
+
+  // Default monthly target: 100,000,000 (100M PKR)
+  const [savedTarget] = useState<number>(100_000_000);
+
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
   const currentDate = new Date().getDate();
@@ -35,35 +35,33 @@ const TeamPerformance: React.FC = () => {
     year: currentYear.toString(),
   });
 
-  // Get current month's margin data
+  // Current month's margin data
   const currentMonthMarginData = useMemo(() => {
     return kpiData.filter((record: any) => {
       const recordDate = new Date(record.date);
-      return recordDate.getMonth() + 1 === currentMonth && 
-             recordDate.getFullYear() === currentYear;
+      return recordDate.getMonth() + 1 === currentMonth &&
+        recordDate.getFullYear() === currentYear;
     });
   }, [kpiData, currentMonth, currentYear]);
 
-  // Calculate working days
+  // Working days (Mon–Fri)
   const workingDaysInfo = useMemo(() => {
     const year = currentYear;
     const month = currentMonth;
-    setMonthlyTarget('100000000');
-    // Total working days in month
+
     let totalWorkingDays = 0;
     let passedWorkingDays = 0;
     let remainingWorkingDays = 0;
-    
+
     const daysInMonth = new Date(year, month, 0).getDate();
-    
+
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month - 1, day);
-      const dayOfWeek = date.getDay();
-      
-      // Skip weekends (0 = Sunday, 6 = Saturday)
+      const dayOfWeek = date.getDay(); // 0 Sun, 6 Sat
+
       if (dayOfWeek !== 0 && dayOfWeek !== 6) {
         totalWorkingDays++;
-        
+
         if (day < currentDate) {
           passedWorkingDays++;
         } else if (day >= currentDate) {
@@ -71,45 +69,60 @@ const TeamPerformance: React.FC = () => {
         }
       }
     }
-    
+
     return {
       total: totalWorkingDays,
       passed: passedWorkingDays,
-      remaining: remainingWorkingDays
+      remaining: remainingWorkingDays,
     };
   }, [currentYear, currentMonth, currentDate]);
 
-  // Calculate margin achievements
+  // Margin analysis for the month
   const marginAnalysis = useMemo(() => {
-    const totalAchieved = currentMonthMarginData.reduce((sum, record: any) => 
-      sum + (record.margin || 0), 0
+    const totalAchieved = currentMonthMarginData.reduce(
+      (sum: number, record: any) => sum + (record.margin || 0),
+      0
     );
-    
-    const dailyTarget = savedTarget > 0 ? savedTarget / workingDaysInfo.total : 0;
+
+    const dailyTarget = workingDaysInfo.total > 0 ? savedTarget / workingDaysInfo.total : 0;
     const expectedByNow = dailyTarget * workingDaysInfo.passed;
     const remaining = Math.max(0, savedTarget - totalAchieved);
-    const dailyRequiredForRemaining = workingDaysInfo.remaining > 0 ? 
-      remaining / workingDaysInfo.remaining : 0;
-    
-    // Daily breakdown
-    const dailyBreakdown = [];
+    const dailyRequiredForRemaining =
+      workingDaysInfo.remaining > 0 ? remaining / workingDaysInfo.remaining : 0;
+
+    // Daily breakdown (working days only)
+    const dailyBreakdown: Array<{
+      day: number;
+      date: string;
+      achieved: number;
+      target: number;
+      isToday: boolean;
+      isPast: boolean;
+      isFuture: boolean;
+      metTarget: boolean;
+      dayName: string;
+    }> = [];
+
     const year = currentYear;
     const month = currentMonth;
     const daysInMonth = new Date(year, month, 0).getDate();
-    
+
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month - 1, day);
       const dayOfWeek = date.getDay();
-      
-      // Skip weekends
+
       if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-        const dateStr = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-        const dayData = currentMonthMarginData.find((record: any) => record.date === dateStr);
+        const dateStr = `${year}-${month.toString().padStart(2, "0")}-${day
+          .toString()
+          .padStart(2, "0")}`;
+        const dayData = currentMonthMarginData.find(
+          (record: any) => record.date === dateStr
+        );
         const achieved = dayData?.margin || 0;
         const isToday = day === currentDate;
         const isPast = day < currentDate;
         const isFuture = day > currentDate;
-        
+
         dailyBreakdown.push({
           day,
           date: dateStr,
@@ -119,11 +132,11 @@ const TeamPerformance: React.FC = () => {
           isPast,
           isFuture,
           metTarget: achieved >= dailyTarget,
-          dayName: date.toLocaleDateString('en-US', { weekday: 'short' })
+          dayName: date.toLocaleDateString("en-US", { weekday: "short" }),
         });
       }
     }
-    
+
     return {
       totalAchieved,
       dailyTarget,
@@ -131,17 +144,19 @@ const TeamPerformance: React.FC = () => {
       remaining,
       dailyRequiredForRemaining,
       onTrack: totalAchieved >= expectedByNow,
-      dailyBreakdown
+      dailyBreakdown,
     };
-  }, [currentMonthMarginData, savedTarget, workingDaysInfo, currentYear, currentMonth, currentDate]);
+  }, [
+    currentMonthMarginData,
+    savedTarget,
+    workingDaysInfo,
+    currentYear,
+    currentMonth,
+    currentDate,
+  ]);
 
-  const handleSaveTarget = () => {
-    const target = parseFloat(monthlyTarget.replace(/,/g, '')) || 0;
-    setSavedTarget(target);
-    setMonthlyTarget("");
-  };
   const kpiOptions = [
-    { value: "margin", label: "Margin (PKR)", unit: "PKR" },
+    { value: "margin", label: "Margin (PKR)", unit: " PKR" },
     { value: "calls", label: "Calls", unit: "" },
     { value: "leads_generated", label: "Leads Generated", unit: "" },
     { value: "solo_closing", label: "Solo Closing", unit: "" },
@@ -151,9 +166,9 @@ const TeamPerformance: React.FC = () => {
     { value: "smd", label: "SMD", unit: "%" },
   ];
 
-  const selectedKPIInfo = kpiOptions.find(kpi => kpi.value === selectedKPI);
+  const selectedKPIInfo = kpiOptions.find((kpi) => kpi.value === selectedKPI);
 
-  // Aggregate monthly data and fill missing months with zeros
+  // Aggregate monthly data (Jan..current month); fill gaps with zeros
   const monthlyData = useMemo(() => {
     if (!kpiData.length) return [];
 
@@ -161,8 +176,8 @@ const TeamPerformance: React.FC = () => {
 
     kpiData.forEach((record: any) => {
       const date = new Date(record.date);
-      const monthKey = format(date, 'yyyy-MM');
-      const monthLabel = format(date, 'MMM yyyy');
+      const monthKey = format(date, "yyyy-MM");
+      const monthLabel = format(date, "MMM yyyy");
 
       if (!monthlyAggregation[monthKey]) {
         monthlyAggregation[monthKey] = {
@@ -192,14 +207,14 @@ const TeamPerformance: React.FC = () => {
       monthlyAggregation[monthKey].recordCount += 1;
     });
 
-    const allMonths = [];
+    const allMonths: Array<{ monthKey: string; monthLabel: string }> = [];
     const now = new Date();
-    const currentMonth = now.getMonth();
+    const currentMonthIndex = now.getMonth();
 
-    for (let m = 0; m <= currentMonth; m++) {
+    for (let m = 0; m <= currentMonthIndex; m++) {
       const date = new Date(currentYear, m, 1);
-      const monthKey = format(date, 'yyyy-MM');
-      const monthLabel = format(date, 'MMM yyyy');
+      const monthKey = format(date, "yyyy-MM");
+      const monthLabel = format(date, "MMM yyyy");
       allMonths.push({ monthKey, monthLabel });
     }
 
@@ -208,7 +223,8 @@ const TeamPerformance: React.FC = () => {
         const month = monthlyAggregation[monthKey];
         return {
           ...month,
-          product_knowledge: month.recordCount > 0 ? Math.round(month.product_knowledge / month.recordCount) : 0,
+          product_knowledge:
+            month.recordCount > 0 ? Math.round(month.product_knowledge / month.recordCount) : 0,
           smd: month.recordCount > 0 ? Math.round(month.smd / month.recordCount) : 0,
         };
       } else {
@@ -231,68 +247,72 @@ const TeamPerformance: React.FC = () => {
     return result;
   }, [kpiData, currentYear]);
 
-  // Calculate average per month for selected KPI
+  // Average for selected KPI (uses mean for % metrics)
   const averageValue = useMemo(() => {
     if (!monthlyData.length) return 0;
 
-    if (selectedKPI === 'product_knowledge' || selectedKPI === 'smd') {
-      const sum = monthlyData.reduce((acc, month) => acc + month[selectedKPI], 0);
+    if (selectedKPI === "product_knowledge" || selectedKPI === "smd") {
+      const sum = monthlyData.reduce((acc: number, m: any) => acc + m[selectedKPI], 0);
       return sum / monthlyData.length;
     } else {
-      return monthlyData.reduce((acc, month) => acc + month[selectedKPI], 0) / monthlyData.length;
+      return (
+        monthlyData.reduce((acc: number, m: any) => acc + m[selectedKPI], 0) /
+        monthlyData.length
+      );
     }
   }, [monthlyData, selectedKPI]);
 
-  // Calculate total value for display (slightly different than averageValue for some KPIs)
+  // Total value (and rounded mean for % metrics)
   const totalValue = useMemo(() => {
     if (!monthlyData.length) return 0;
 
-    if (selectedKPI === 'product_knowledge' || selectedKPI === 'smd') {
-      const sum = monthlyData.reduce((acc, month) => acc + month[selectedKPI], 0);
+    if (selectedKPI === "product_knowledge" || selectedKPI === "smd") {
+      const sum = monthlyData.reduce((acc: number, m: any) => acc + m[selectedKPI], 0);
       return Math.round(sum / monthlyData.length);
     } else {
-      return monthlyData.reduce((acc, month) => acc + month[selectedKPI], 0);
+      return monthlyData.reduce((acc: number, m: any) => acc + m[selectedKPI], 0);
     }
   }, [monthlyData, selectedKPI]);
 
-  // Add barColor property to each month based on comparison with averageValue
+  // Color-code bars against average
   const monthlyDataWithColors = useMemo(() => {
-    return monthlyData.map(month => {
-      let barColor = 'gray';
-      if (month[selectedKPI] > averageValue) barColor = 'green';
-      else if (month[selectedKPI] < averageValue) barColor = 'red';
-
-      return { ...month, barColor };
+    return monthlyData.map((m: any) => {
+      let barColor = "gray";
+      if (m[selectedKPI] > averageValue) barColor = "green";
+      else if (m[selectedKPI] < averageValue) barColor = "red";
+      return { ...m, barColor };
     });
   }, [monthlyData, averageValue, selectedKPI]);
 
   const formatValue = (value: number) => {
-    if (selectedKPI === 'margin') {
-      return (value / 1000000).toFixed(1) + 'M';
+    if (selectedKPI === "margin") {
+      return (value / 1_000_000).toFixed(1) + "M";
     }
     return value.toLocaleString();
   };
 
   const formatTooltipValue = (value: number) => {
-    if (selectedKPI === 'margin') {
+    if (selectedKPI === "margin") {
       return `${value.toLocaleString()} PKR`;
     }
-    return `${value.toLocaleString()}${selectedKPIInfo?.unit || ''}`;
+    return `${value.toLocaleString()}${selectedKPIInfo?.unit || ""}`;
   };
 
-  const AvgLabel = (props) => {
-    const { x, y, width, value } = props;
+  type AvgLabelProps = { x: number; y: number; width?: number; value: string };
+  const AvgLabel: React.FC<AvgLabelProps> = ({ x, y, value }) => {
     return (
-      <foreignObject x={x + 5} y={y - 20} width={100} height={30}>
-        <div style={{
-          backgroundColor: 'white',
-          padding: '2px 6px',
-          borderRadius: 4,
-          fontWeight: 'bold',
-          color: 'blue',
-          fontSize: 12,
-          boxShadow: '0 0 4px rgba(0,0,0,0.1)'
-        }}>
+      <foreignObject x={x + 5} y={y - 20} width={120} height={30}>
+        <div
+          style={{
+            backgroundColor: "white",
+            padding: "2px 6px",
+            borderRadius: 4,
+            fontWeight: "bold",
+            color: "blue",
+            fontSize: 12,
+            boxShadow: "0 0 4px rgba(0,0,0,0.1)",
+          }}
+        >
           {value}
         </div>
       </foreignObject>
@@ -307,7 +327,7 @@ const TeamPerformance: React.FC = () => {
             <TabsTrigger value="analytics">Performance Analytics</TabsTrigger>
             <TabsTrigger value="margin-target">Daily Margin Tracker</TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="analytics" className="space-y-8">
             {/* Header */}
             <div>
@@ -332,7 +352,7 @@ const TeamPerformance: React.FC = () => {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {kpiOptions.map(kpi => (
+                        {kpiOptions.map((kpi) => (
                           <SelectItem key={kpi.value} value={kpi.value}>
                             {kpi.label}
                           </SelectItem>
@@ -342,10 +362,13 @@ const TeamPerformance: React.FC = () => {
                   </div>
                   <div className="flex-1">
                     <Label className="text-sm text-muted-foreground mb-2 block">
-                      {selectedKPI === 'product_knowledge' || selectedKPI === 'smd' ? 'Average' : 'Total'} {selectedKPIInfo?.label}
+                      {(selectedKPI === "product_knowledge" || selectedKPI === "smd"
+                        ? "Average "
+                        : "Total ") + (selectedKPIInfo?.label ?? "")}
                     </Label>
                     <div className="text-3xl font-bold text-primary">
-                      {formatValue(totalValue)}{selectedKPIInfo?.unit}
+                      {formatValue(totalValue)}
+                      {selectedKPIInfo?.unit}
                     </div>
                   </div>
                 </div>
@@ -356,9 +379,7 @@ const TeamPerformance: React.FC = () => {
             <Card className="shadow-md">
               <CardHeader>
                 <CardTitle>Monthly {selectedKPIInfo?.label} Performance</CardTitle>
-                <CardDescription>
-                  Team performance from January {currentYear} to present
-                </CardDescription>
+                <CardDescription>Team performance from January {currentYear} to present</CardDescription>
               </CardHeader>
               <CardContent>
                 {isLoading ? (
@@ -377,10 +398,7 @@ const TeamPerformance: React.FC = () => {
                 ) : (
                   <div className="h-96">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={monthlyDataWithColors}
-                        margin={{ top: 20, right: 40, left: 30, bottom: 90 }}
-                      >
+                      <BarChart data={monthlyDataWithColors} margin={{ top: 20, right: 40, left: 30, bottom: 90 }}>
                         <CartesianGrid stroke="#eee" strokeDasharray="4 4" />
                         <XAxis
                           dataKey="month"
@@ -390,20 +408,16 @@ const TeamPerformance: React.FC = () => {
                           height={90}
                           interval={0}
                         />
-                        <YAxis
-                          tickFormatter={formatValue}
-                          tick={{ fontSize: 12, fill: '#555' }}
-                          width={60}
-                        />
+                        <YAxis tickFormatter={formatValue} tick={{ fontSize: 12, fill: "#555" }} width={60} />
                         <Tooltip
                           formatter={(value: number) => [formatTooltipValue(value), selectedKPIInfo?.label]}
-                          labelFormatter={label => `Month: ${label}`}
+                          labelFormatter={(label) => `Month: ${label}`}
                           contentStyle={{
-                            backgroundColor: 'hsl(var(--card))',
-                            border: '1px solid hsl(var(--border))',
-                            borderRadius: '8px',
-                            padding: '10px',
-                            boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+                            backgroundColor: "hsl(var(--card))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: "8px",
+                            padding: "10px",
+                            boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
                           }}
                         />
                         <Legend verticalAlign="top" height={36} />
@@ -414,7 +428,7 @@ const TeamPerformance: React.FC = () => {
                           label={<AvgLabel value={`Average ${formatValue(averageValue)}`} />}
                         />
                         <Bar dataKey={selectedKPI} radius={[6, 6, 0, 0]} maxBarSize={40}>
-                          {monthlyDataWithColors.map((entry, index) => (
+                          {monthlyDataWithColors.map((entry: any, index: number) => (
                             <Cell key={`cell-${index}`} fill={entry.barColor} />
                           ))}
                         </Bar>
@@ -433,12 +447,14 @@ const TeamPerformance: React.FC = () => {
                     <div className="text-center">
                       <p className="text-sm text-muted-foreground">Best Month</p>
                       <p className="text-2xl font-bold text-primary mt-2">
-                        {monthlyData.reduce((best, current) =>
-                          current[selectedKPI] > best[selectedKPI] ? current : best
-                        ).month}
+                        {
+                          monthlyData.reduce((best: any, current: any) =>
+                            current[selectedKPI] > best[selectedKPI] ? current : best
+                          ).month
+                        }
                       </p>
                       <p className="text-sm text-muted-foreground mt-1">
-                        {formatTooltipValue(Math.max(...monthlyData.map(m => m[selectedKPI])))}
+                        {formatTooltipValue(Math.max(...monthlyData.map((m: any) => m[selectedKPI])))}
                       </p>
                     </div>
                   </CardContent>
@@ -448,12 +464,8 @@ const TeamPerformance: React.FC = () => {
                   <CardContent className="p-6">
                     <div className="text-center">
                       <p className="text-sm text-muted-foreground">Months Tracked</p>
-                      <p className="text-2xl font-bold text-primary mt-2">
-                        {monthlyData.length}
-                      </p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Since Jan {currentYear}
-                      </p>
+                      <p className="text-2xl font-bold text-primary mt-2">{monthlyData.length}</p>
+                      <p className="text-sm text-muted-foreground mt-1">Since Jan {currentYear}</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -462,14 +474,13 @@ const TeamPerformance: React.FC = () => {
                   <CardContent className="p-6">
                     <div className="text-center">
                       <p className="text-sm text-muted-foreground">
-                        {selectedKPI === 'product_knowledge' || selectedKPI === 'smd' ? 'Average' : 'Monthly Average'}
+                        {selectedKPI === "product_knowledge" || selectedKPI === "smd" ? "Average" : "Monthly Average"}
                       </p>
                       <p className="text-2xl font-bold text-primary mt-2">
-                        {formatValue(Math.round(totalValue / (monthlyData.length || 1)))}{selectedKPIInfo?.unit}
+                        {formatValue(Math.round(totalValue / (monthlyData.length || 1)))}
+                        {selectedKPIInfo?.unit}
                       </p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Per month
-                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">Per month</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -482,51 +493,17 @@ const TeamPerformance: React.FC = () => {
             <div>
               <h1 className="text-3xl font-bold text-foreground">Daily Margin Target Tracker</h1>
               <p className="text-muted-foreground mt-2">
-                Set monthly targets and track daily progress for {format(new Date(currentYear, currentMonth - 1), 'MMMM yyyy')}
+                Tracking for {format(new Date(currentYear, currentMonth - 1), "MMMM yyyy")} — default monthly target is{" "}
+                {(savedTarget / 1_000_000).toFixed(0)}M PKR
               </p>
             </div>
 
-            {/* Target Setting */}
-            {/* <Card className="shadow-sm ">
-              <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Target className="h-5 w-5" />
-                  <span>Monthly Target Setting</span>
-                </CardTitle>
-                <CardDescription>
-                  Set the margin target for {format(new Date(currentYear, currentMonth - 1), 'MMMM yyyy')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-end space-x-4">
-                  <div className="flex-1 max-w-xs">
-                    <Label className="text-sm text-muted-foreground mb-2 block">
-                      Monthly Target (PKR)
-                    </Label>
-                    <Input
-                      type="text"
-                      placeholder="e.g., 5,000,000"
-                      value={monthlyTarget}
-                      onChange={(e) => {
-                        const rawValue = e.target.value.replace(/,/g, '').replace(/[^0-9.]/g, '');
-                        const formattedValue = rawValue.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-                        setMonthlyTarget(formattedValue);
-                      }}
-                    />
-                  </div>
-                  <Button onClick={handleSaveTarget} disabled={!monthlyTarget.trim()}>
-                    Set Target
-                  </Button>
-                </div>
-                {savedTarget > 0 && (
-                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-green-800 font-medium">
-                      ✓ Current Target: {savedTarget.toLocaleString()} PKR for {format(new Date(currentYear, currentMonth - 1), 'MMMM yyyy')}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card> */}
+            {/* Target Setting UI intentionally removed (kept commented for future use) */}
+            {/*
+            <Card className="shadow-sm ">
+              ... previous "Monthly Target Setting" card ...
+            </Card>
+            */}
 
             {savedTarget > 0 && (
               <>
@@ -538,9 +515,7 @@ const TeamPerformance: React.FC = () => {
                         <Calendar className="h-4 w-4 text-primary" />
                         <p className="text-sm text-muted-foreground">Working Days</p>
                       </div>
-                      <p className="text-2xl font-bold text-primary">
-                        {workingDaysInfo.total}
-                      </p>
+                      <p className="text-2xl font-bold text-primary">{workingDaysInfo.total}</p>
                       <p className="text-xs text-muted-foreground mt-1">
                         {workingDaysInfo.passed} passed, {workingDaysInfo.remaining} remaining
                       </p>
@@ -554,11 +529,9 @@ const TeamPerformance: React.FC = () => {
                         <p className="text-sm text-muted-foreground">Daily Target</p>
                       </div>
                       <p className="text-2xl font-bold text-primary">
-                        {(marginAnalysis.dailyTarget / 1000000).toFixed(2)}M
+                        {(marginAnalysis.dailyTarget / 1_000_000).toFixed(2)}M
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        PKR per working day
-                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">PKR per working day</p>
                     </CardContent>
                   </Card>
 
@@ -569,7 +542,7 @@ const TeamPerformance: React.FC = () => {
                         <p className="text-sm text-muted-foreground">Achieved</p>
                       </div>
                       <p className="text-2xl font-bold text-primary">
-                        {(marginAnalysis.totalAchieved / 1000000).toFixed(2)}M
+                        {(marginAnalysis.totalAchieved / 1_000_000).toFixed(2)}M
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
                         {((marginAnalysis.totalAchieved / savedTarget) * 100).toFixed(1)}% of target
@@ -583,10 +556,7 @@ const TeamPerformance: React.FC = () => {
                         <AlertTriangle className="h-4 w-4 text-primary" />
                         <p className="text-sm text-muted-foreground">Status</p>
                       </div>
-                      <Badge 
-                        variant={marginAnalysis.onTrack ? "default" : "destructive"}
-                        className="text-sm"
-                      >
+                      <Badge variant={marginAnalysis.onTrack ? "default" : "destructive"} className="text-sm">
                         {marginAnalysis.onTrack ? "On Track" : "Behind Target"}
                       </Badge>
                       <p className="text-xs text-muted-foreground mt-2">
@@ -601,20 +571,18 @@ const TeamPerformance: React.FC = () => {
                   <Card className="shadow-sm border-orange-200 bg-orange-50">
                     <CardContent className="p-6">
                       <div className="text-center">
-                        <h3 className="text-lg font-semibold text-orange-800 mb-2">
-                          Remaining Target Breakdown
-                        </h3>
+                        <h3 className="text-lg font-semibold text-orange-800 mb-2">Remaining Target Breakdown</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div>
                             <p className="text-sm text-orange-600">Remaining Amount</p>
                             <p className="text-3xl font-bold text-orange-800">
-                              {(marginAnalysis.remaining / 1000000).toFixed(2)}M PKR
+                              {(marginAnalysis.remaining / 1_000_000).toFixed(2)}M PKR
                             </p>
                           </div>
                           <div>
                             <p className="text-sm text-orange-600">Required Daily (Remaining Days)</p>
                             <p className="text-3xl font-bold text-orange-800">
-                              {(marginAnalysis.dailyRequiredForRemaining / 1000000).toFixed(2)}M PKR
+                              {(marginAnalysis.dailyRequiredForRemaining / 1_000_000).toFixed(2)}M PKR
                             </p>
                             <p className="text-xs text-orange-600 mt-1">
                               For next {workingDaysInfo.remaining} working days
@@ -631,7 +599,7 @@ const TeamPerformance: React.FC = () => {
                   <CardHeader>
                     <CardTitle>Daily Margin Breakdown</CardTitle>
                     <CardDescription>
-                      Daily performance vs target for {format(new Date(currentYear, currentMonth - 1), 'MMMM yyyy')}
+                      Daily performance vs target for {format(new Date(currentYear, currentMonth - 1), "MMMM yyyy")}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -648,40 +616,43 @@ const TeamPerformance: React.FC = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {marginAnalysis.dailyBreakdown.map((day, index) => {
+                          {marginAnalysis.dailyBreakdown.map((day) => {
                             const difference = day.achieved - day.target;
                             return (
-                              <tr 
-                                key={day.day} 
+                              <tr
+                                key={day.day}
                                 className={`border-b ${
-                                  day.isToday ? 'bg-blue-50' : 
-                                  day.isPast ? (day.metTarget ? 'bg-green-50' : 'bg-red-50') : 
-                                  'bg-gray-50'
+                                  day.isToday
+                                    ? "bg-blue-50"
+                                    : day.isPast
+                                    ? day.metTarget
+                                      ? "bg-green-50"
+                                      : "bg-red-50"
+                                    : "bg-gray-50"
                                 }`}
                               >
                                 <td className="p-3 font-medium">
                                   {day.dayName} {day.day}
                                   {day.isToday && <Badge variant="outline" className="ml-2 text-xs">Today</Badge>}
                                 </td>
-                                <td className="p-3 text-muted-foreground">
-                                  {format(new Date(day.date), 'MMM dd')}
-                                </td>
-                                <td className="p-3 text-right font-medium">
-                                  {day.target.toLocaleString()}
-                                </td>
-                                <td className="p-3 text-right font-bold">
-                                  {day.achieved.toLocaleString()}
-                                </td>
-                                <td className={`p-3 text-right font-medium ${
-                                  difference >= 0 ? 'text-green-600' : 'text-red-600'
-                                }`}>
-                                  {difference >= 0 ? '+' : ''}{difference.toLocaleString()}
+                                <td className="p-3 text-muted-foreground">{format(new Date(day.date), "MMM dd")}</td>
+                                <td className="p-3 text-right font-medium">{day.target.toLocaleString()}</td>
+                                <td className="p-3 text-right font-bold">{day.achieved.toLocaleString()}</td>
+                                <td
+                                  className={`p-3 text-right font-medium ${
+                                    difference >= 0 ? "text-green-600" : "text-red-600"
+                                  }`}
+                                >
+                                  {difference >= 0 ? "+" : ""}
+                                  {difference.toLocaleString()}
                                 </td>
                                 <td className="p-3 text-center">
                                   {day.isFuture ? (
                                     <Badge variant="outline">Upcoming</Badge>
                                   ) : day.metTarget ? (
-                                    <Badge variant="default" className="bg-green-600">✓ Met</Badge>
+                                    <Badge variant="default" className="bg-green-600">
+                                      ✓ Met
+                                    </Badge>
                                   ) : (
                                     <Badge variant="destructive">✗ Missed</Badge>
                                   )}
