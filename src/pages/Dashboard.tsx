@@ -24,6 +24,7 @@ import {
   Tooltip,
   Cell,
 } from "recharts";
+import { Button } from "@/components/ui/button";
 import { useEmployees } from "@/hooks/useEmployees";
 import { useKPIData } from "@/hooks/useKPIData";
 import { useAuth } from "@/hooks/useAuth";
