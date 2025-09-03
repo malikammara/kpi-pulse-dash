@@ -175,9 +175,8 @@ const EmployeePerformance: React.FC = () => {
         solo_closing: 0,
         out_house_meetings: 0,
         in_house_meetings: 0,
-        product_knowledge: 0,
-        smd: 0,
-        recordCount: 0,
+        product_knowledge: 0, // raw % value (0-100)
+        smd: 0,                // raw % value (0-100)
       });
     });
 
@@ -186,16 +185,16 @@ const EmployeePerformance: React.FC = () => {
       const empId = record.employee_id;
       if (performanceMap.has(empId)) {
         const emp = performanceMap.get(empId);
-        emp.margin += record.margin || 0;
-        emp.calls += record.calls || 0;
-        emp.leads_generated += record.leads_generated || 0;
-        emp.solo_closing += record.solo_closing || 0;
-        emp.out_house_meetings += record.out_house_meetings || 0;
-        emp.in_house_meetings += record.in_house_meetings || 0;
+        emp.margin += record.margin ?? 0;
+        emp.calls += record.calls ?? 0;
+        emp.leads_generated += record.leads_generated ?? 0;
+        emp.solo_closing += record.solo_closing ?? 0;
+        emp.out_house_meetings += record.out_house_meetings ?? 0;
+        emp.in_house_meetings += record.in_house_meetings ?? 0;
       }
     });
 
-    // Handle percentage KPIs from monthly data
+    // Handle percentage KPIs from monthly data (take max per month)
     const knowledgeByEmp = new Map<string, number>();
     const smdByEmp = new Map<string, number>();
 
@@ -213,18 +212,13 @@ const EmployeePerformance: React.FC = () => {
 
     // Apply percentage KPIs
     knowledgeByEmp.forEach((value, empId) => {
-      if (performanceMap.has(empId)) {
-        performanceMap.get(empId).product_knowledge = value;
-      }
+      if (performanceMap.has(empId)) performanceMap.get(empId).product_knowledge = value;
     });
-
     smdByEmp.forEach((value, empId) => {
-      if (performanceMap.has(empId)) {
-        performanceMap.get(empId).smd = value;
-      }
+      if (performanceMap.has(empId)) performanceMap.get(empId).smd = value;
     });
 
-    // Calculate overall scores and percentages
+    // Calculate overall scores and percentages (store % in *Pct fields)
     const result = Array.from(performanceMap.values()).map((emp: any) => {
       const kpiPerformances = [
         { key: "margin", achieved: emp.margin, target: adjustedKpiTargets.margin, weight: kpiWeights.margin },
@@ -242,56 +236,51 @@ const EmployeePerformance: React.FC = () => {
         return sum + pct * kpi.weight;
       }, 0);
 
-      // Calculate individual KPI percentages
-      const kpiPercentages = {};
+      const pct: Record<string, number> = {};
       kpiPerformances.forEach((kpi) => {
-        kpiPercentages[kpi.key] = (kpi.achieved / (kpi.target || 1)) * 100;
+        pct[`${kpi.key}Pct`] = (kpi.achieved / (kpi.target || 1)) * 100;
       });
 
       return {
-        ...emp,
+        ...emp, // raw totals preserved
         overallScore: Math.round(overallScore),
-        ...kpiPercentages,
+        ...pct, // e.g., marginPct, callsPct, ...
       };
     });
 
     return result;
   }, [employees, filteredKpiData, monthlyKpiData, adjustedKpiTargets, kpiWeights]);
 
-  // Apply filtering
+  // Apply filtering (use % fields for KPI filters)
   const filteredEmployees = useMemo(() => {
     if (filterKPI === "all") return employeePerformance;
-    
+
     const threshold = 50; // 50% threshold for filtering
-    return employeePerformance.filter((emp: any) => {
-      if (filterKPI === "overall") {
-        return emp.overallScore >= threshold;
-      }
-      return emp[filterKPI] >= threshold;
-    });
+    if (filterKPI === "overall") {
+      return employeePerformance.filter((emp: any) => emp.overallScore >= threshold);
+    }
+    const key = `${filterKPI}Pct` as keyof (typeof employeePerformance)[number];
+    return employeePerformance.filter((emp: any) => (emp[key] ?? 0) >= threshold);
   }, [employeePerformance, filterKPI]);
 
-  // Apply sorting
+  // Apply sorting (keeps current behavior: sorts by raw totals or overall score/name)
   const sortedEmployees = useMemo(() => {
     const sorted = [...filteredEmployees].sort((a: any, b: any) => {
-      let aValue, bValue;
-      
+      let aValue: any, bValue: any;
+
       if (sortBy === "overall") {
         aValue = a.overallScore;
         bValue = b.overallScore;
       } else if (sortBy === "name") {
-        aValue = a.name.toLowerCase();
-        bValue = b.name.toLowerCase();
+        aValue = a.name?.toLowerCase() ?? "";
+        bValue = b.name?.toLowerCase() ?? "";
       } else {
-        aValue = a[sortBy] || 0;
-        bValue = b[sortBy] || 0;
+        aValue = a[sortBy] ?? 0; // raw totals for KPI columns
+        bValue = b[sortBy] ?? 0;
       }
 
-      if (sortOrder === "asc") {
-        return aValue > bValue ? 1 : -1;
-      } else {
-        return aValue < bValue ? 1 : -1;
-      }
+      if (sortOrder === "asc") return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+      return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
     });
 
     return sorted;
@@ -319,11 +308,12 @@ const EmployeePerformance: React.FC = () => {
   };
 
   const formatNumber = (num: number | null | undefined): string => {
-    if (num == null) return "-";
+    if (num == null || Number.isNaN(num)) return "-";
     return num.toLocaleString();
   };
 
-  const formatPercentage = (num: number): string => {
+  const formatPercentage = (num: number | null | undefined): string => {
+    if (num == null || Number.isNaN(num)) return "-";
     return `${num.toFixed(1)}%`;
   };
 
@@ -718,73 +708,91 @@ const EmployeePerformance: React.FC = () => {
                             </div>
                           </div>
                         </TableCell>
+
+                        {/* Overall */}
                         <TableCell className="text-center">
                           <div className="flex flex-col items-center space-y-1">
                             <span className="text-lg font-bold">{employee.overallScore}%</span>
                             {getPerformanceBadge(employee.overallScore)}
                           </div>
                         </TableCell>
+
+                        {/* Margin */}
                         <TableCell className="text-center">
                           <div className="flex flex-col items-center">
                             <span className="font-medium">{formatNumber(employee.margin)}</span>
                             <span className="text-xs text-muted-foreground">
-                              {formatPercentage(employee.margin)}
+                              {formatPercentage(employee.marginPct)}
                             </span>
                           </div>
                         </TableCell>
+
+                        {/* Calls */}
                         <TableCell className="text-center">
                           <div className="flex flex-col items-center">
                             <span className="font-medium">{formatNumber(employee.calls)}</span>
                             <span className="text-xs text-muted-foreground">
-                              {formatPercentage(employee.calls)}
+                              {formatPercentage(employee.callsPct)}
                             </span>
                           </div>
                         </TableCell>
+
+                        {/* Leads */}
                         <TableCell className="text-center">
                           <div className="flex flex-col items-center">
                             <span className="font-medium">{formatNumber(employee.leads_generated)}</span>
                             <span className="text-xs text-muted-foreground">
-                              {formatPercentage(employee.leads_generated)}
+                              {formatPercentage(employee.leads_generatedPct)}
                             </span>
                           </div>
                         </TableCell>
+
+                        {/* Solo Closing */}
                         <TableCell className="text-center">
                           <div className="flex flex-col items-center">
                             <span className="font-medium">{formatNumber(employee.solo_closing)}</span>
                             <span className="text-xs text-muted-foreground">
-                              {formatPercentage(employee.solo_closing)}
+                              {formatPercentage(employee.solo_closingPct)}
                             </span>
                           </div>
                         </TableCell>
+
+                        {/* Out-house Meetings */}
                         <TableCell className="text-center">
                           <div className="flex flex-col items-center">
                             <span className="font-medium">{formatNumber(employee.out_house_meetings)}</span>
                             <span className="text-xs text-muted-foreground">
-                              {formatPercentage(employee.out_house_meetings)}
+                              {formatPercentage(employee.out_house_meetingsPct)}
                             </span>
                           </div>
                         </TableCell>
+
+                        {/* In-house Meetings */}
                         <TableCell className="text-center">
                           <div className="flex flex-col items-center">
                             <span className="font-medium">{formatNumber(employee.in_house_meetings)}</span>
                             <span className="text-xs text-muted-foreground">
-                              {formatPercentage(employee.in_house_meetings)}
+                              {formatPercentage(employee.in_house_meetingsPct)}
                             </span>
                           </div>
                         </TableCell>
+
+                        {/* Knowledge (raw already a %) */}
                         <TableCell className="text-center">
                           <div className="flex flex-col items-center">
                             <span className="font-medium">{formatNumber(employee.product_knowledge)}%</span>
                             <span className="text-xs text-muted-foreground">
-                              {formatPercentage(employee.product_knowledge)}
+                              {formatPercentage(employee.product_knowledgePct)}
                             </span>
                           </div>
                         </TableCell>
+
+                        {/* SMD (raw already a %) */}
                         <TableCell className="text-center">
                           <div className="flex flex-col items-center">
                             <span className="font-medium">{formatNumber(employee.smd)}%</span>
                             <span className="text-xs text-muted-foreground">
-                              {formatPercentage(employee.smd)}
+                              {formatPercentage(employee.smdPct)}
                             </span>
                           </div>
                         </TableCell>
