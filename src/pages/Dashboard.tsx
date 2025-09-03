@@ -28,6 +28,7 @@ import { useEmployees } from "@/hooks/useEmployees";
 import { useKPIData } from "@/hooks/useKPIData";
 import { useAuth } from "@/hooks/useAuth";
 import React, { useState, useMemo, useEffect } from "react";
+import { Link } from "react-router-dom";
 
 // -- Helpers --
 function formatNumber(num: number | null | undefined): string {
@@ -493,6 +494,31 @@ const Dashboard: React.FC = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Admin-only Employee Performance Link */}
+        {isAdmin && (
+          <div className="mb-8">
+            <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-blue-900 mb-2">
+                      Employee Performance Analysis
+                    </h3>
+                    <p className="text-blue-700 text-sm">
+                      Compare individual employee performance, sort by KPIs, and identify top performers
+                    </p>
+                  </div>
+                  <Link to="/employee-performance">
+                    <Button className="bg-blue-600 hover:bg-blue-700 text-white">
+                      View Employee Analysis →
+                    </Button>
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* KPI Metric Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

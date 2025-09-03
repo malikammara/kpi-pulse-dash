@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import ManageKPIs from "./pages/ManageKPIs";
 import CRM from "./pages/CRM";
 import TeamPerformance from "./pages/TeamPerformance";
+import EmployeePerformance from "./pages/EmployeePerformance";
 import Auth from "./pages/Auth";
 import AdminGuard from "@/components/AdminGuard";
 import LoginGuard from "@/components/LoginGuard";
@@ -51,6 +52,11 @@ const App = () => (
               <LoginGuard>
                 <CRM />
               </LoginGuard>
+            } />
+            <Route path="/employee-performance" element={
+              <AdminGuard>
+                <EmployeePerformance />
+              </AdminGuard>
             } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
