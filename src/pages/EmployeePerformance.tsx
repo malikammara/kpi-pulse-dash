@@ -301,9 +301,9 @@ const EmployeePerformance: React.FC = () => {
   };
 
   const getPerformanceBadge = (score: number) => {
-    if (score >= 80) return <Badge className="bg-green-600">Excellent</Badge>;
-    if (score >= 60) return <Badge className="bg-blue-600">Good</Badge>;
-    if (score >= 40) return <Badge className="bg-yellow-600">Average</Badge>;
+    if (score >= 70) return <Badge className="bg-green-600">Excellent</Badge>;
+    if (score >= 50) return <Badge className="bg-blue-600">Good</Badge>;
+    if (score >= 30) return <Badge className="bg-yellow-600">Average</Badge>;
     return <Badge variant="destructive">Needs Improvement</Badge>;
   };
 
