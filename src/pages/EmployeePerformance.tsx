@@ -562,7 +562,7 @@ const EmployeePerformance: React.FC = () => {
               <p className="text-2xl font-bold text-primary">
                 {employeePerformance.filter((emp: any) => emp.overallScore < 40).length}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">Below 40% performance</p>
+              <p className="text-xs text-muted-foreground mt-1">Below 30% performance</p>
             </CardContent>
           </Card>
         </div>
