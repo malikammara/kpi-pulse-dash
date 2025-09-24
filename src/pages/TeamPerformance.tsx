@@ -3,18 +3,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  Legend,
-  Cell,
-  ReferenceLine,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, Legend, Cell, ReferenceLine,
 } from "recharts";
 import { useKPIData } from "@/hooks/useKPIData";
+import { useKPIMonthly } from "@/hooks/useKPIMonthly"; // <-- new
 import React, { useState, useMemo } from "react";
 import { format } from "date-fns";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -35,46 +27,78 @@ const TeamPerformance: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<"analytics" | "margin-target">("analytics");
 
-  // Default monthly target: 100,000,000 (100M PKR)
   const [savedTarget] = useState<number>(100_000_000);
 
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
   const currentDate = new Date().getDate();
 
-  // --- FILTER-AWARE QUERIES ---
-
-  // Analytics: only date + selected KPI for the current year
+  // --- ANALYTICS: use RPC returning 12 rows max (month, month_key, value)
   const {
-    data: analyticsRows = [],
+    data: monthlyRows = [],
     isLoading: isAnalyticsLoading,
-  } = useKPIData(
-    {
-      year: currentYear.toString(),
-      columns: ["date", selectedKPI],
-    },
-    { enabled: activeTab === "analytics" }
+  } = useKPIMonthly({ kpi: selectedKPI, year: currentYear });
+
+  // Normalize for chart format and pad missing months with zeros
+  const monthlyData = useMemo(() => {
+    const map = new Map(monthlyRows.map(r => [r.month_key, r]));
+    const out: any[] = [];
+    for (let m = 0; m <= new Date().getMonth(); m++) {
+      const d = new Date(currentYear, m, 1);
+      const key = format(d, "yyyy-MM");
+      const label = format(d, "MMM yyyy");
+      const row = map.get(key);
+      out.push({
+        month: label,
+        monthKey: key,
+        [selectedKPI]: row ? Number(row.value) : 0,
+      });
+    }
+    return out;
+  }, [monthlyRows, selectedKPI, currentYear]);
+
+  // Average/Total (for % metrics we already get monthly averages; we’ll average those again across months)
+  const averageValue = useMemo(() => {
+    if (!monthlyData.length) return 0;
+    const vals = monthlyData.map((m: any) => m[selectedKPI] as number);
+    return vals.reduce((a, b) => a + b, 0) / vals.length;
+  }, [monthlyData, selectedKPI]);
+
+  const totalValue = useMemo(() => {
+    if (!monthlyData.length) return 0;
+    if (selectedKPI === "product_knowledge" || selectedKPI === "smd") {
+      // overall average of monthly averages
+      return Math.round(
+        monthlyData.reduce((a: number, m: any) => a + (m[selectedKPI] as number), 0) / monthlyData.length
+      );
+    }
+    // sum across months
+    return monthlyData.reduce((a: number, m: any) => a + (m[selectedKPI] as number), 0);
+  }, [monthlyData, selectedKPI]);
+
+  const monthlyDataWithColors = useMemo(
+    () =>
+      monthlyData.map((m: any) => ({
+        ...m,
+        barColor: (m[selectedKPI] as number) > averageValue ? "green" :
+                  (m[selectedKPI] as number) < averageValue ? "red" : "gray",
+      })),
+    [monthlyData, averageValue, selectedKPI]
   );
 
-  // Daily Margin Tracker: only date + margin for the current month
+  // --- DAILY MARGIN TRACKER: thin query for current month (date + margin only)
   const {
     data: dailyMarginRows = [],
     isLoading: isDailyLoading,
   } = useKPIData(
-    {
-      year: currentYear.toString(),
-      month: String(currentMonth),
-      columns: ["date", "margin"],
-    },
+    { year: String(currentYear), month: String(currentMonth), columns: ["date", "margin"] },
     { enabled: activeTab === "margin-target" }
   );
 
-  // Current month's margin aggregation from DB-limited rows
   const marginByDate = useMemo(() => {
     const map = new Map<string, number>();
     for (const r of dailyMarginRows as any[]) {
-      const key = r.date; // 'YYYY-MM-DD'
-      map.set(key, (map.get(key) || 0) + (r.margin || 0));
+      map.set(r.date, (map.get(r.date) || 0) + (r.margin || 0));
     }
     return map;
   }, [dailyMarginRows]);
@@ -84,35 +108,21 @@ const TeamPerformance: React.FC = () => {
     const year = currentYear;
     const month = currentMonth;
 
-    let totalWorkingDays = 0;
-    let passedWorkingDays = 0;
-    let remainingWorkingDays = 0;
-
+    let total = 0, passed = 0, remaining = 0;
     const daysInMonth = new Date(year, month, 0).getDate();
 
     for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(year, month - 1, day);
-      const dayOfWeek = date.getDay(); // 0 Sun, 6 Sat
-
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-        totalWorkingDays++;
-
-        if (day < currentDate) {
-          passedWorkingDays++;
-        } else if (day >= currentDate) {
-          remainingWorkingDays++;
-        }
+      const dt = new Date(year, month - 1, day);
+      const dow = dt.getDay();
+      if (dow !== 0 && dow !== 6) {
+        total++;
+        if (day < currentDate) passed++;
+        else remaining++;
       }
     }
-
-    return {
-      total: totalWorkingDays,
-      passed: passedWorkingDays,
-      remaining: remainingWorkingDays,
-    };
+    return { total, passed, remaining };
   }, [currentYear, currentMonth, currentDate]);
 
-  // Margin analysis for the month (uses marginByDate from DB-limited rows)
   const marginAnalysis = useMemo(() => {
     const dailyTarget = workingDaysInfo.total > 0 ? savedTarget / workingDaysInfo.total : 0;
 
@@ -121,47 +131,37 @@ const TeamPerformance: React.FC = () => {
     const daysInMonth = new Date(year, month, 0).getDate();
 
     const dailyBreakdown: Array<{
-      day: number;
-      date: string;
-      achieved: number;
-      target: number;
-      isToday: boolean;
-      isPast: boolean;
-      isFuture: boolean;
-      metTarget: boolean;
-      dayName: string;
+      day: number; date: string; achieved: number; target: number;
+      isToday: boolean; isPast: boolean; isFuture: boolean; metTarget: boolean; dayName: string;
     }> = [];
 
     let totalAchieved = 0;
 
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month - 1, day);
-      const dayOfWeek = date.getDay();
+      const dow = date.getDay();
+      if (dow === 0 || dow === 6) continue;
 
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-        const dateStr = `${year}-${month.toString().padStart(2, "0")}-${day
-          .toString()
-          .padStart(2, "0")}`;
+      const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const achieved = marginByDate.get(dateStr) ?? 0;
 
-        const achieved = marginByDate.get(dateStr) ?? 0;
-        totalAchieved += achieved;
+      totalAchieved += achieved;
 
-        const isToday = day === currentDate;
-        const isPast = day < currentDate;
-        const isFuture = day > currentDate;
+      const isToday = day === currentDate;
+      const isPast = day < currentDate;
+      const isFuture = day > currentDate;
 
-        dailyBreakdown.push({
-          day,
-          date: dateStr,
-          achieved,
-          target: dailyTarget,
-          isToday,
-          isPast,
-          isFuture,
-          metTarget: achieved >= dailyTarget,
-          dayName: date.toLocaleDateString("en-US", { weekday: "short" }),
-        });
-      }
+      dailyBreakdown.push({
+        day,
+        date: dateStr,
+        achieved,
+        target: dailyTarget,
+        isToday,
+        isPast,
+        isFuture,
+        metTarget: achieved >= dailyTarget,
+        dayName: date.toLocaleDateString("en-US", { weekday: "short" }),
+      });
     }
 
     const expectedByNow = dailyTarget * workingDaysInfo.passed;
@@ -178,7 +178,7 @@ const TeamPerformance: React.FC = () => {
       onTrack: totalAchieved >= expectedByNow,
       dailyBreakdown,
     };
-  }, [marginByDate, savedTarget, workingDaysInfo, currentYear, currentMonth, currentDate]);
+  }, [marginByDate, workingDaysInfo, savedTarget, currentYear, currentMonth, currentDate]);
 
   const kpiOptions = [
     { value: "margin", label: "Margin (PKR)", unit: " PKR" },
@@ -191,146 +191,31 @@ const TeamPerformance: React.FC = () => {
     { value: "smd", label: "SMD", unit: "%" },
   ];
 
-  const selectedKPIInfo = kpiOptions.find((kpi) => kpi.value === selectedKPI);
+  const selectedKPIInfo = kpiOptions.find((k) => k.value === selectedKPI);
 
-  // Aggregate monthly data (Jan..current month) from analyticsRows; fill gaps with zeros
-  const monthlyData = useMemo(() => {
-    if (!analyticsRows.length) return [];
+  const formatValue = (value: number) =>
+    selectedKPI === "margin" ? (value / 1_000_000).toFixed(1) + "M" : value.toLocaleString();
 
-    const monthlyAggregation: Record<string, any> = {};
+  const formatTooltipValue = (value: number) =>
+    selectedKPI === "margin" ? `${value.toLocaleString()} PKR` : `${value.toLocaleString()}${selectedKPIInfo?.unit ?? ""}`;
 
-    analyticsRows.forEach((record: any) => {
-      const date = new Date(record.date);
-      if (date.getFullYear() !== currentYear) return;
-
-      const monthKey = format(date, "yyyy-MM");
-      const monthLabel = format(date, "MMM yyyy");
-
-      if (!monthlyAggregation[monthKey]) {
-        monthlyAggregation[monthKey] = {
-          month: monthLabel,
-          monthKey,
-          [selectedKPI]: 0,
-          recordCount: 0,
-        };
-      }
-
-      monthlyAggregation[monthKey][selectedKPI] =
-        (monthlyAggregation[monthKey][selectedKPI] || 0) + (record[selectedKPI] || 0);
-      monthlyAggregation[monthKey].recordCount += 1;
-    });
-
-    const allMonths: Array<{ monthKey: string; monthLabel: string }> = [];
-    const now = new Date();
-    const currentMonthIndex = now.getMonth();
-
-    for (let m = 0; m <= currentMonthIndex; m++) {
-      const date = new Date(currentYear, m, 1);
-      const monthKey = format(date, "yyyy-MM");
-      const monthLabel = format(date, "MMM yyyy");
-      allMonths.push({ monthKey, monthLabel });
-    }
-
-    const result = allMonths.map(({ monthKey, monthLabel }) => {
-      if (monthlyAggregation[monthKey]) {
-        const month = monthlyAggregation[monthKey];
-
-        if (selectedKPI === "product_knowledge" || selectedKPI === "smd") {
-          const sum = month[selectedKPI] || 0;
-          const cnt = month.recordCount || 1;
-          return {
-            month: monthLabel,
-            monthKey,
-            [selectedKPI]: Math.round(sum / cnt),
-            recordCount: month.recordCount,
-          };
-        } else {
-          return month;
-        }
-      } else {
-        return {
-          month: monthLabel,
-          monthKey,
-          [selectedKPI]: 0,
-          recordCount: 0,
-        };
-      }
-    });
-
-    return result;
-  }, [analyticsRows, currentYear, selectedKPI]);
-
-  // Average for selected KPI (uses mean for % metrics)
-  const averageValue = useMemo(() => {
-    if (!monthlyData.length) return 0;
-
-    if (selectedKPI === "product_knowledge" || selectedKPI === "smd") {
-      const sum = monthlyData.reduce((acc: number, m: any) => acc + m[selectedKPI], 0);
-      return sum / monthlyData.length;
-    } else {
-      return (
-        monthlyData.reduce((acc: number, m: any) => acc + m[selectedKPI], 0) /
-        monthlyData.length
-      );
-    }
-  }, [monthlyData, selectedKPI]);
-
-  // Total value (and rounded mean for % metrics)
-  const totalValue = useMemo(() => {
-    if (!monthlyData.length) return 0;
-
-    if (selectedKPI === "product_knowledge" || selectedKPI === "smd") {
-      const sum = monthlyData.reduce((acc: number, m: any) => acc + m[selectedKPI], 0);
-      return Math.round(sum / monthlyData.length);
-    } else {
-      return monthlyData.reduce((acc: number, m: any) => acc + m[selectedKPI], 0);
-    }
-  }, [monthlyData, selectedKPI]);
-
-  // Color-code bars against average
-  const monthlyDataWithColors = useMemo(() => {
-    return monthlyData.map((m: any) => {
-      let barColor = "gray";
-      if (m[selectedKPI] > averageValue) barColor = "green";
-      else if (m[selectedKPI] < averageValue) barColor = "red";
-      return { ...m, barColor };
-    });
-  }, [monthlyData, averageValue, selectedKPI]);
-
-  const formatValue = (value: number) => {
-    if (selectedKPI === "margin") {
-      return (value / 1_000_000).toFixed(1) + "M";
-    }
-    return value.toLocaleString();
-  };
-
-  const formatTooltipValue = (value: number) => {
-    if (selectedKPI === "margin") {
-      return `${value.toLocaleString()} PKR`;
-    }
-    return `${value.toLocaleString()}${selectedKPIInfo?.unit || ""}`;
-  };
-
-  type AvgLabelProps = { x: number; y: number; width?: number; value: string };
-  const AvgLabel: React.FC<AvgLabelProps> = ({ x, y, value }) => {
-    return (
-      <foreignObject x={x + 5} y={y - 20} width={120} height={30}>
-        <div
-          style={{
-            backgroundColor: "white",
-            padding: "2px 6px",
-            borderRadius: 4,
-            fontWeight: "bold",
-            color: "blue",
-            fontSize: 12,
-            boxShadow: "0 0 4px rgba(0,0,0,0.1)",
-          }}
-        >
-          {value}
-        </div>
-      </foreignObject>
-    );
-  };
+  const AvgLabel: React.FC<{ x: number; y: number; value: string }> = ({ x, y, value }) => (
+    <foreignObject x={x + 5} y={y - 20} width={120} height={30}>
+      <div
+        style={{
+          backgroundColor: "white",
+          padding: "2px 6px",
+          borderRadius: 4,
+          fontWeight: "bold",
+          color: "blue",
+          fontSize: 12,
+          boxShadow: "0 0 4px rgba(0,0,0,0.1)",
+        }}
+      >
+        {value}
+      </div>
+    </foreignObject>
+  );
 
   return (
     <Layout>
@@ -341,16 +226,13 @@ const TeamPerformance: React.FC = () => {
             <TabsTrigger value="margin-target">Daily Margin Tracker</TabsTrigger>
           </TabsList>
 
+          {/* Analytics (Monthly, RPC) */}
           <TabsContent value="analytics" className="space-y-8">
-            {/* Header */}
             <div>
               <h1 className="text-3xl font-bold text-foreground">Team Performance Analytics</h1>
-              <p className="text-muted-foreground mt-2">
-                Monthly performance overview for the entire team from {currentYear}
-              </p>
+              <p className="text-muted-foreground mt-2">Monthly performance overview from {currentYear}</p>
             </div>
 
-            {/* KPI Selector */}
             <Card className="shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg">Select KPI Metric</CardTitle>
@@ -361,34 +243,27 @@ const TeamPerformance: React.FC = () => {
                   <div className="flex-1 max-w-xs">
                     <Label className="text-sm text-muted-foreground mb-2 block">KPI Metric</Label>
                     <Select value={selectedKPI} onValueChange={(v) => setSelectedKPI(v as any)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {kpiOptions.map((kpi) => (
-                          <SelectItem key={kpi.value} value={kpi.value}>
-                            {kpi.label}
-                          </SelectItem>
+                          <SelectItem key={kpi.value} value={kpi.value}>{kpi.label}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="flex-1">
                     <Label className="text-sm text-muted-foreground mb-2 block">
-                      {(selectedKPI === "product_knowledge" || selectedKPI === "smd"
-                        ? "Average "
-                        : "Total ") + (selectedKPIInfo?.label ?? "")}
+                      {(selectedKPI === "product_knowledge" || selectedKPI === "smd" ? "Average " : "Total ")
+                        + (selectedKPIInfo?.label ?? "")}
                     </Label>
                     <div className="text-3xl font-bold text-primary">
-                      {formatValue(totalValue)}
-                      {selectedKPIInfo?.unit}
+                      {formatValue(totalValue)}{selectedKPIInfo?.unit}
                     </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Chart */}
             <Card className="shadow-md">
               <CardHeader>
                 <CardTitle>Monthly {selectedKPIInfo?.label} Performance</CardTitle>
@@ -397,15 +272,13 @@ const TeamPerformance: React.FC = () => {
               <CardContent>
                 {isAnalyticsLoading ? (
                   <div className="h-96 flex items-center justify-center">
-                    <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
+                    <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
                   </div>
-                ) : monthlyDataWithColors.length === 0 ? (
+                ) : monthlyData.length === 0 ? (
                   <div className="h-96 flex items-center justify-center">
                     <div className="text-center">
                       <p className="text-muted-foreground text-lg">No data available</p>
-                      <p className="text-muted-foreground text-sm mt-2">
-                        Add some KPI data to see team performance charts
-                      </p>
+                      <p className="text-muted-foreground text-sm mt-2">Add some KPI data to see team performance charts</p>
                     </div>
                   </div>
                 ) : (
@@ -413,14 +286,7 @@ const TeamPerformance: React.FC = () => {
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={monthlyDataWithColors} margin={{ top: 20, right: 40, left: 30, bottom: 90 }}>
                         <CartesianGrid stroke="#eee" strokeDasharray="4 4" />
-                        <XAxis
-                          dataKey="month"
-                          tick={{ fontSize: 12 }}
-                          angle={-45}
-                          textAnchor="end"
-                          height={90}
-                          interval={0}
-                        />
+                        <XAxis dataKey="month" tick={{ fontSize: 12 }} angle={-45} textAnchor="end" height={90} interval={0} />
                         <YAxis tickFormatter={formatValue} tick={{ fontSize: 12, fill: "#555" }} width={60} />
                         <Tooltip
                           formatter={(value: number) => [formatTooltipValue(value), selectedKPIInfo?.label]}
@@ -452,7 +318,6 @@ const TeamPerformance: React.FC = () => {
               </CardContent>
             </Card>
 
-            {/* Summary Stats */}
             {monthlyData.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card className="shadow-sm">
@@ -460,11 +325,9 @@ const TeamPerformance: React.FC = () => {
                     <div className="text-center">
                       <p className="text-sm text-muted-foreground">Best Month</p>
                       <p className="text-2xl font-bold text-primary mt-2">
-                        {
-                          monthlyData.reduce((best: any, current: any) =>
-                            current[selectedKPI] > best[selectedKPI] ? current : best
-                          ).month
-                        }
+                        {monthlyData.reduce((best: any, current: any) =>
+                          current[selectedKPI] > best[selectedKPI] ? current : best
+                        ).month}
                       </p>
                       <p className="text-sm text-muted-foreground mt-1">
                         {formatTooltipValue(Math.max(...monthlyData.map((m: any) => m[selectedKPI])))}
@@ -490,7 +353,7 @@ const TeamPerformance: React.FC = () => {
                         {selectedKPI === "product_knowledge" || selectedKPI === "smd" ? "Average" : "Monthly Average"}
                       </p>
                       <p className="text-2xl font-bold text-primary mt-2">
-                        {formatValue(Math.round(totalValue / (monthlyData.length || 1)))}
+                        {formatValue(Math.round((totalValue as number) / (monthlyData.length || 1)))}
                         {selectedKPIInfo?.unit}
                       </p>
                       <p className="text-sm text-muted-foreground mt-1">Per month</p>
@@ -501,8 +364,8 @@ const TeamPerformance: React.FC = () => {
             )}
           </TabsContent>
 
+          {/* Daily Margin Tracker (current month only) */}
           <TabsContent value="margin-target" className="space-y-8">
-            {/* Header */}
             <div>
               <h1 className="text-3xl font-bold text-foreground">Daily Margin Target Tracker</h1>
               <p className="text-muted-foreground mt-2">
@@ -511,9 +374,16 @@ const TeamPerformance: React.FC = () => {
               </p>
             </div>
 
-            {savedTarget > 0 && (
+            {isDailyLoading ? (
+              <Card className="shadow-sm">
+                <CardContent className="p-6">
+                  <div className="h-10 flex items-center justify-center">
+                    <div className="animate-spin h-6 w-6 border-4 border-primary border-t-transparent rounded-full" />
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
               <>
-                {/* Overview Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                   <Card className="shadow-sm">
                     <CardContent className="p-6">
@@ -572,7 +442,6 @@ const TeamPerformance: React.FC = () => {
                   </Card>
                 </div>
 
-                {/* Remaining Target Info */}
                 {marginAnalysis.remaining > 0 && (
                   <Card className="shadow-sm border-orange-200 bg-orange-50">
                     <CardContent className="p-6">
@@ -600,7 +469,6 @@ const TeamPerformance: React.FC = () => {
                   </Card>
                 )}
 
-                {/* Daily Breakdown Table */}
                 <Card className="shadow-md">
                   <CardHeader>
                     <CardTitle>Daily Margin Breakdown</CardTitle>
@@ -649,16 +517,13 @@ const TeamPerformance: React.FC = () => {
                                     difference >= 0 ? "text-green-600" : "text-red-600"
                                   }`}
                                 >
-                                  {difference >= 0 ? "+" : ""}
-                                  {difference.toLocaleString()}
+                                  {difference >= 0 ? "+" : ""}{difference.toLocaleString()}
                                 </td>
                                 <td className="p-3 text-center">
                                   {day.isFuture ? (
                                     <Badge variant="outline">Upcoming</Badge>
                                   ) : day.metTarget ? (
-                                    <Badge variant="default" className="bg-green-600">
-                                      ✓ Met
-                                    </Badge>
+                                    <Badge variant="default" className="bg-green-600">✓ Met</Badge>
                                   ) : (
                                     <Badge variant="destructive">✗ Missed</Badge>
                                   )}
