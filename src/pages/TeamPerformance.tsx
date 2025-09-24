@@ -31,12 +31,14 @@ const TeamPerformance: React.FC = () => {
   const currentMonth = new Date().getMonth() + 1;
   const currentDate = new Date().getDate();
 
+  // Only fetch data for current year to optimize performance
   const { data: kpiData = [], isLoading } = useKPIData({
     year: currentYear.toString(),
   });
 
   // Current month's data
   const currentMonthMarginData = useMemo(() => {
+    if (!kpiData.length) return [];
     return kpiData.filter((record: any) => {
       const recordDate = new Date(record.date);
       return recordDate.getMonth() + 1 === currentMonth && recordDate.getFullYear() === currentYear;
@@ -182,8 +184,12 @@ const TeamPerformance: React.FC = () => {
 
     const monthlyAggregation: Record<string, any> = {};
 
+    // Only process data for current year to improve performance
     kpiData.forEach((record: any) => {
       const date = new Date(record.date);
+      // Skip if not current year (extra safety check)
+      if (date.getFullYear() !== currentYear) return;
+      
       const monthKey = format(date, "yyyy-MM");
       const monthLabel = format(date, "MMM yyyy");
 
@@ -215,10 +221,12 @@ const TeamPerformance: React.FC = () => {
       monthlyAggregation[monthKey].recordCount += 1;
     });
 
+    // Create array for current year months only
     const allMonths: Array<{ monthKey: string; monthLabel: string }> = [];
     const now = new Date();
     const currentMonthIndex = now.getMonth();
 
+    // Only create months up to current month for current year
     for (let m = 0; m <= currentMonthIndex; m++) {
       const date = new Date(currentYear, m, 1);
       const monthKey = format(date, "yyyy-MM");

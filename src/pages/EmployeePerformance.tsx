@@ -63,8 +63,10 @@ const EmployeePerformance: React.FC = () => {
   const currentYear = new Date().getFullYear();
   const { isAdmin } = useAuth();
   const { data: employees = [] } = useEmployees();
+  
+  // Optimize data fetching based on view type
   const { data: kpiData = [], isLoading } = useKPIData({
-    month: selectedMonth,
+    ...(selectedViewType === "Monthly" && { month: selectedMonth }),
     year: currentYear.toString(),
   });
 

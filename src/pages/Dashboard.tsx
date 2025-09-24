@@ -132,9 +132,11 @@ const Dashboard: React.FC = () => {
       setSelectedEmployee('all');
     }
   }, [isAdmin, selectedEmployee, myEmployee]);
+  
+  // Optimize data fetching - only get data for selected filters
   const { data: kpiData = [], isLoading } = useKPIData({
     employeeId: selectedEmployee === "all" ? undefined : selectedEmployee,
-    month: selectedMonth,
+    ...(selectedViewType === "Monthly" && { month: selectedMonth }),
     year: selectedYear,
   });
 

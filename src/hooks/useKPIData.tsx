@@ -47,6 +47,11 @@ export const useKPIData = (filters?: {
         const startDate = `${filters.year}-${filters.month.padStart(2, '0')}-01`;
         const endDate = new Date(parseInt(filters.year), parseInt(filters.month), 0).toISOString().split('T')[0];
         query = query.gte('date', startDate).lte('date', endDate);
+      } else if (filters?.year) {
+        // If only year is provided, get data for the entire year
+        const startDate = `${filters.year}-01-01`;
+        const endDate = `${filters.year}-12-31`;
+        query = query.gte('date', startDate).lte('date', endDate);
       }
 
       const { data, error } = await query;
