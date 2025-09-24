@@ -22,7 +22,18 @@ import { Badge } from "@/components/ui/badge";
 import { Target, TrendingUp, Calendar, AlertTriangle } from "lucide-react";
 
 const TeamPerformance: React.FC = () => {
-  const [selectedKPI, setSelectedKPI] = useState("margin");
+  const [selectedKPI, setSelectedKPI] = useState<
+    | "margin"
+    | "calls"
+    | "leads_generated"
+    | "solo_closing"
+    | "out_house_meetings"
+    | "in_house_meetings"
+    | "product_knowledge"
+    | "smd"
+  >("margin");
+
+  const [activeTab, setActiveTab] = useState<"analytics" | "margin-target">("analytics");
 
   // Default monthly target: 100,000,000 (100M PKR)
   const [savedTarget] = useState<number>(100_000_000);
@@ -31,29 +42,42 @@ const TeamPerformance: React.FC = () => {
   const currentMonth = new Date().getMonth() + 1;
   const currentDate = new Date().getDate();
 
-  // Only fetch data for current year to optimize performance
-  const { data: kpiData = [], isLoading } = useKPIData({
-    year: currentYear.toString(),
-  });
+  // --- FILTER-AWARE QUERIES ---
 
-  // Current month's data
-  const currentMonthMarginData = useMemo(() => {
-    if (!kpiData.length) return [];
-    return kpiData.filter((record: any) => {
-      const recordDate = new Date(record.date);
-      return recordDate.getMonth() + 1 === currentMonth && recordDate.getFullYear() === currentYear;
-    });
-  }, [kpiData, currentMonth, currentYear]);
+  // Analytics: only date + selected KPI for the current year
+  const {
+    data: analyticsRows = [],
+    isLoading: isAnalyticsLoading,
+  } = useKPIData(
+    {
+      year: currentYear.toString(),
+      columns: ["date", selectedKPI],
+    },
+    { enabled: activeTab === "analytics" }
+  );
 
-  // 🔧 FIX: Aggregate margin by date (sum of all employees for the day)
+  // Daily Margin Tracker: only date + margin for the current month
+  const {
+    data: dailyMarginRows = [],
+    isLoading: isDailyLoading,
+  } = useKPIData(
+    {
+      year: currentYear.toString(),
+      month: String(currentMonth),
+      columns: ["date", "margin"],
+    },
+    { enabled: activeTab === "margin-target" }
+  );
+
+  // Current month's margin aggregation from DB-limited rows
   const marginByDate = useMemo(() => {
     const map = new Map<string, number>();
-    for (const r of currentMonthMarginData) {
+    for (const r of dailyMarginRows as any[]) {
       const key = r.date; // 'YYYY-MM-DD'
       map.set(key, (map.get(key) || 0) + (r.margin || 0));
     }
     return map;
-  }, [currentMonthMarginData]);
+  }, [dailyMarginRows]);
 
   // Working days (Mon–Fri)
   const workingDaysInfo = useMemo(() => {
@@ -88,20 +112,14 @@ const TeamPerformance: React.FC = () => {
     };
   }, [currentYear, currentMonth, currentDate]);
 
-  // Margin analysis for the month
+  // Margin analysis for the month (uses marginByDate from DB-limited rows)
   const marginAnalysis = useMemo(() => {
-    const totalAchieved = currentMonthMarginData.reduce(
-      (sum: number, record: any) => sum + (record.margin || 0),
-      0
-    );
-
     const dailyTarget = workingDaysInfo.total > 0 ? savedTarget / workingDaysInfo.total : 0;
-    const expectedByNow = dailyTarget * workingDaysInfo.passed;
-    const remaining = Math.max(0, savedTarget - totalAchieved);
-    const dailyRequiredForRemaining =
-      workingDaysInfo.remaining > 0 ? remaining / workingDaysInfo.remaining : 0;
 
-    // Daily breakdown (working days only)
+    const year = currentYear;
+    const month = currentMonth;
+    const daysInMonth = new Date(year, month, 0).getDate();
+
     const dailyBreakdown: Array<{
       day: number;
       date: string;
@@ -114,19 +132,19 @@ const TeamPerformance: React.FC = () => {
       dayName: string;
     }> = [];
 
-    const year = currentYear;
-    const month = currentMonth;
-    const daysInMonth = new Date(year, month, 0).getDate();
+    let totalAchieved = 0;
 
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month - 1, day);
       const dayOfWeek = date.getDay();
 
       if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-        const dateStr = `${year}-${month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+        const dateStr = `${year}-${month.toString().padStart(2, "0")}-${day
+          .toString()
+          .padStart(2, "0")}`;
 
-        // 🔧 FIX applied here: use aggregated margin for the date
         const achieved = marginByDate.get(dateStr) ?? 0;
+        totalAchieved += achieved;
 
         const isToday = day === currentDate;
         const isPast = day < currentDate;
@@ -146,6 +164,11 @@ const TeamPerformance: React.FC = () => {
       }
     }
 
+    const expectedByNow = dailyTarget * workingDaysInfo.passed;
+    const remaining = Math.max(0, savedTarget - totalAchieved);
+    const dailyRequiredForRemaining =
+      workingDaysInfo.remaining > 0 ? remaining / workingDaysInfo.remaining : 0;
+
     return {
       totalAchieved,
       dailyTarget,
@@ -155,15 +178,7 @@ const TeamPerformance: React.FC = () => {
       onTrack: totalAchieved >= expectedByNow,
       dailyBreakdown,
     };
-  }, [
-    currentMonthMarginData,
-    savedTarget,
-    workingDaysInfo,
-    currentYear,
-    currentMonth,
-    currentDate,
-    marginByDate, // ensure recompute when aggregation changes
-  ]);
+  }, [marginByDate, savedTarget, workingDaysInfo, currentYear, currentMonth, currentDate]);
 
   const kpiOptions = [
     { value: "margin", label: "Margin (PKR)", unit: " PKR" },
@@ -178,18 +193,16 @@ const TeamPerformance: React.FC = () => {
 
   const selectedKPIInfo = kpiOptions.find((kpi) => kpi.value === selectedKPI);
 
-  // Aggregate monthly data (Jan..current month); fill gaps with zeros
+  // Aggregate monthly data (Jan..current month) from analyticsRows; fill gaps with zeros
   const monthlyData = useMemo(() => {
-    if (!kpiData.length) return [];
+    if (!analyticsRows.length) return [];
 
     const monthlyAggregation: Record<string, any> = {};
 
-    // Only process data for current year to improve performance
-    kpiData.forEach((record: any) => {
+    analyticsRows.forEach((record: any) => {
       const date = new Date(record.date);
-      // Skip if not current year (extra safety check)
       if (date.getFullYear() !== currentYear) return;
-      
+
       const monthKey = format(date, "yyyy-MM");
       const monthLabel = format(date, "MMM yyyy");
 
@@ -197,36 +210,20 @@ const TeamPerformance: React.FC = () => {
         monthlyAggregation[monthKey] = {
           month: monthLabel,
           monthKey,
-          margin: 0,
-          calls: 0,
-          leads_generated: 0,
-          solo_closing: 0,
-          out_house_meetings: 0,
-          in_house_meetings: 0,
-          product_knowledge: 0,
-          smd: 0,
+          [selectedKPI]: 0,
           recordCount: 0,
         };
       }
 
-      monthlyAggregation[monthKey].margin += record.margin || 0;
-      monthlyAggregation[monthKey].calls += record.calls || 0;
-      monthlyAggregation[monthKey].leads_generated += record.leads_generated || 0;
-      monthlyAggregation[monthKey].solo_closing += record.solo_closing || 0;
-      monthlyAggregation[monthKey].out_house_meetings += record.out_house_meetings || 0;
-      monthlyAggregation[monthKey].in_house_meetings += record.in_house_meetings || 0;
-
-      monthlyAggregation[monthKey].product_knowledge += record.product_knowledge || 0;
-      monthlyAggregation[monthKey].smd += record.smd || 0;
+      monthlyAggregation[monthKey][selectedKPI] =
+        (monthlyAggregation[monthKey][selectedKPI] || 0) + (record[selectedKPI] || 0);
       monthlyAggregation[monthKey].recordCount += 1;
     });
 
-    // Create array for current year months only
     const allMonths: Array<{ monthKey: string; monthLabel: string }> = [];
     const now = new Date();
     const currentMonthIndex = now.getMonth();
 
-    // Only create months up to current month for current year
     for (let m = 0; m <= currentMonthIndex; m++) {
       const date = new Date(currentYear, m, 1);
       const monthKey = format(date, "yyyy-MM");
@@ -237,31 +234,31 @@ const TeamPerformance: React.FC = () => {
     const result = allMonths.map(({ monthKey, monthLabel }) => {
       if (monthlyAggregation[monthKey]) {
         const month = monthlyAggregation[monthKey];
-        return {
-          ...month,
-          product_knowledge:
-            month.recordCount > 0 ? Math.round(month.product_knowledge / month.recordCount) : 0,
-          smd: month.recordCount > 0 ? Math.round(month.smd / month.recordCount) : 0,
-        };
+
+        if (selectedKPI === "product_knowledge" || selectedKPI === "smd") {
+          const sum = month[selectedKPI] || 0;
+          const cnt = month.recordCount || 1;
+          return {
+            month: monthLabel,
+            monthKey,
+            [selectedKPI]: Math.round(sum / cnt),
+            recordCount: month.recordCount,
+          };
+        } else {
+          return month;
+        }
       } else {
         return {
           month: monthLabel,
           monthKey,
-          margin: 0,
-          calls: 0,
-          leads_generated: 0,
-          solo_closing: 0,
-          out_house_meetings: 0,
-          in_house_meetings: 0,
-          product_knowledge: 0,
-          smd: 0,
+          [selectedKPI]: 0,
           recordCount: 0,
         };
       }
     });
 
     return result;
-  }, [kpiData, currentYear]);
+  }, [analyticsRows, currentYear, selectedKPI]);
 
   // Average for selected KPI (uses mean for % metrics)
   const averageValue = useMemo(() => {
@@ -338,7 +335,7 @@ const TeamPerformance: React.FC = () => {
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Tabs defaultValue="analytics" className="w-full">
+        <Tabs defaultValue="analytics" className="w-full" onValueChange={(v) => setActiveTab(v as any)}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="analytics">Performance Analytics</TabsTrigger>
             <TabsTrigger value="margin-target">Daily Margin Tracker</TabsTrigger>
@@ -363,7 +360,7 @@ const TeamPerformance: React.FC = () => {
                 <div className="flex items-center space-x-4">
                   <div className="flex-1 max-w-xs">
                     <Label className="text-sm text-muted-foreground mb-2 block">KPI Metric</Label>
-                    <Select value={selectedKPI} onValueChange={setSelectedKPI}>
+                    <Select value={selectedKPI} onValueChange={(v) => setSelectedKPI(v as any)}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -398,7 +395,7 @@ const TeamPerformance: React.FC = () => {
                 <CardDescription>Team performance from January {currentYear} to present</CardDescription>
               </CardHeader>
               <CardContent>
-                {isLoading ? (
+                {isAnalyticsLoading ? (
                   <div className="h-96 flex items-center justify-center">
                     <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
                   </div>
@@ -513,13 +510,6 @@ const TeamPerformance: React.FC = () => {
                 {(savedTarget / 1_000_000).toFixed(0)}M PKR
               </p>
             </div>
-
-            {/* Target Setting UI intentionally removed (kept commented for future use) */}
-            {/*
-            <Card className="shadow-sm ">
-              ... previous "Monthly Target Setting" card ...
-            </Card>
-            */}
 
             {savedTarget > 0 && (
               <>
