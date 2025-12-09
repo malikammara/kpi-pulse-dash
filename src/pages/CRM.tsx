@@ -27,7 +27,7 @@ import {
 import { useState, useMemo } from "react";
 import { Tab } from "@headlessui/react";
 import clsx from "clsx";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/components/AuthProvider";
 import { useEmployees } from "@/hooks/useEmployees";
 import { 
   useContacts, 
