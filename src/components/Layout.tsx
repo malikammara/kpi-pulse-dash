@@ -1,12 +1,11 @@
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, Home, Settings, Users, UserCheck, TrendingUp } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { BarChart3, Home, Settings, Users, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/AuthProvider";
 import { cn } from "@/lib/utils";
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
-  const navigate = useNavigate();
   const { user, isAdmin } = useAuth();
 
   const navigation = [
@@ -18,13 +17,13 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <div className="min-h-screen text-foreground">
-      <div className="pointer-events-none fixed inset-0 bg-gradient-to-b from-sky-400/10 via-sky-500/5 to-slate-900/60" />
-      <header className="bg-white/5 backdrop-blur-xl border-b border-white/10 shadow-lg relative">
+      <div className="pointer-events-none fixed inset-0 bg-gradient-to-b from-sky-50/85 via-white/92 to-blue-50/70" />
+      <header className="bg-white/90 backdrop-blur-xl border-b border-sky-100/80 shadow-sm relative">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 justify-between items-center">
             <div className="flex items-center">
               <BarChart3 className="h-8 w-8 text-primary mr-2 drop-shadow" />
-              <h1 className="text-xl font-bold text-white tracking-tight">KPI Monitor</h1>
+              <h1 className="text-xl font-bold text-slate-800 tracking-tight">KPI Monitor</h1>
             </div>
 
             <nav className="hidden md:flex space-x-1">
@@ -37,10 +36,10 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                       variant={isActive ? "default" : "ghost"}
                       size="sm"
                       className={cn(
-                        "flex items-center space-x-2 transition-all", 
+                        "flex items-center space-x-2 transition-all",
                         isActive
-                          ? "shadow-md shadow-primary/30"
-                          : "hover:bg-white/10 hover:text-white"
+                          ? "shadow-md shadow-primary/15"
+                          : "hover:bg-primary/10 hover:text-slate-800"
                       )}
                     >
                       <Icon className="h-4 w-4" />
@@ -51,15 +50,19 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               })}
             </nav>
 
-            <div className="flex items-center space-x-2">
-              <div className="flex items-center space-x-2 text-sm text-sky-50">
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2 text-sm text-slate-700">
                 <Users className="h-4 w-4" />
-                <span className="text-sky-100/90">{user?.email ?? "Demo User"}</span>
+                <span className="text-slate-700">{user?.email ?? "Demo User"}</span>
                 {isAdmin && (
-                  <span className="bg-primary/20 text-primary px-2 py-1 rounded-full text-xs">Demo Admin</span>
+                  <span className="bg-primary/10 text-primary px-2 py-1 rounded-full text-xs">Demo Admin</span>
                 )}
               </div>
-              <Button variant="secondary" size="sm" className="bg-white/10 text-white border border-white/20">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="bg-primary/10 text-primary border border-primary/10 shadow-sm hover:bg-primary/15"
+              >
                 Demo Mode
               </Button>
             </div>
