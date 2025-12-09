@@ -1,14 +1,12 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { BarChart3, Home, Settings, Users, LogOut, User, UserCheck, TrendingUp } from "lucide-react";
+import { BarChart3, Home, Settings, Users, UserCheck, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/components/AuthProvider";
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isAdmin, signOut } = useAuth();
-  const { toast } = useToast();
+  const { user, isAdmin } = useAuth();
 
   const navigation = [
     { name: "Home", href: "/", icon: Home },
@@ -46,48 +44,16 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               })}
             </nav>
 
-            {user ? (
-              <div className="flex items-center space-x-2">
-                <div className="flex items-center space-x-2 text-sm">
-                  <User className="h-4 w-4" />
-                  <span className="text-muted-foreground">{user.email}</span>
-                  {isAdmin && (
-                    <span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs">Admin</span>
-                  )}
-                </div>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={async () => {
-                    try {
-                      await signOut();
-                      navigate('/auth');
-                      toast({
-                        title: "Signed out",
-                        description: "You have been successfully signed out.",
-                      });
-                    } catch (error) {
-                      toast({
-                        title: "Sign out failed",
-                        description: "Failed to sign out. Please try again.",
-                        variant: "destructive",
-                      });
-                    }
-                  }}
-                >
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Sign Out
-                </Button>
+            <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 text-sm">
+                <Users className="h-4 w-4" />
+                <span className="text-muted-foreground">{user?.email ?? "Demo User"}</span>
+                {isAdmin && (
+                  <span className="bg-primary/10 text-primary px-2 py-1 rounded text-xs">Demo Admin</span>
+                )}
               </div>
-            ) : (
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => navigate('/auth')}
-              >
-                Sign In
-              </Button>
-            )}
+              <Button variant="secondary" size="sm">Demo Mode</Button>
+            </div>
           </div>
         </div>
       </header>
