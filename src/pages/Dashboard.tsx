@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Layout from "@/components/Layout";
 import {
   Card,
@@ -552,6 +552,13 @@ const Dashboard: React.FC = () => {
     []
   );
 
+  const agents = useMemo(
+    () => Array.from(new Set(callLogs.map((log) => log.agent))),
+    [callLogs]
+  );
+
+  const [viewMode, setViewMode] = useState<"personal" | "manager">("personal");
+  const [personalAgent, setPersonalAgent] = useState(callLogs[0]?.agent ?? "");
   const [callTimePreset, setCallTimePreset] = useState<"today" | "last7" | "last30" | "custom">("last7");
   const [callCustomFrom, setCallCustomFrom] = useState("");
   const [callCustomTo, setCallCustomTo] = useState("");
@@ -561,12 +568,30 @@ const Dashboard: React.FC = () => {
   const [talkTimeFilter, setTalkTimeFilter] = useState("all");
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!agents.includes(personalAgent) && agents.length > 0) {
+      setPersonalAgent(agents[0]);
+    }
+  }, [agents, personalAgent]);
+
+  useEffect(() => {
+    if (viewMode === "personal") {
+      setActiveAgent(personalAgent);
+    } else {
+      setActiveAgent(null);
+    }
+  }, [viewMode, personalAgent]);
+
   const filteredCalls = useMemo(() => {
     const fromDate = callCustomFrom ? new Date(callCustomFrom) : null;
     const toDate = callCustomTo ? new Date(callCustomTo) : null;
     const preset = callTimePreset;
 
     return callLogs.filter((log) => {
+      const matchesAudience = viewMode === "manager" || log.agent === personalAgent;
+
+      if (!matchesAudience) return false;
+
       const matchesPreset =
         preset === "custom"
           ? (() => {
@@ -592,7 +617,7 @@ const Dashboard: React.FC = () => {
 
       return matchesPreset && matchesSegment && matchesMeetingType && matchesImportance && matchesTalkTime;
     });
-  }, [callLogs, callTimePreset, callCustomFrom, callCustomTo, segmentFilter, callMeetingType, importanceFilter, talkTimeFilter]);
+  }, [callLogs, viewMode, personalAgent, callTimePreset, callCustomFrom, callCustomTo, segmentFilter, callMeetingType, importanceFilter, talkTimeFilter]);
 
   const agentSummaries = useMemo(() => {
     const map = new Map<string, { calls: number; meetings: number; talkTime: number }>();
@@ -677,20 +702,82 @@ const Dashboard: React.FC = () => {
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold text-foreground">Performance Dashboards</h1>
-          <p className="text-muted-foreground">
-            Enhanced visibility across telesales, projected meetings, and KPI progress with real-time filtering, sorting, and drill-downs.
-          </p>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex-1 space-y-1">
+            <h1 className="text-3xl font-bold text-foreground">BD Performance Cockpit</h1>
+            <p className="text-muted-foreground">
+              Switch between your personal workspace and the manager control tower to track calls, KPIs, and upcoming meetings.
+            </p>
+          </div>
+          <Card className="w-full max-w-xl shadow-sm">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Audience</p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={viewMode === "personal" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setViewMode("personal")}
+                    >
+                      My Dashboard
+                    </Button>
+                    <Button
+                      variant={viewMode === "manager" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setViewMode("manager")}
+                    >
+                      Manager View
+                    </Button>
+                  </div>
+                </div>
+                <Badge variant="secondary" className="text-xs">
+                  {viewMode === "personal" ? "Individual focus" : "Team-wide visibility"}
+                </Badge>
+              </div>
+              {viewMode === "personal" && (
+                <div className="space-y-1">
+                  <Label>Choose your profile</Label>
+                  <Select
+                    value={personalAgent}
+                    onValueChange={(value) => {
+                      setPersonalAgent(value);
+                      setActiveAgent(value);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select agent" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {agents.map((agent) => (
+                        <SelectItem key={agent} value={agent}>
+                          {agent}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Calls & Telesales Dashboard */}
         <Card className="shadow-sm">
           <CardHeader>
-            <CardTitle>Calls &amp; Telesales Dashboard</CardTitle>
-            <CardDescription>
-              Holistic view auto-calculates from call logs. Click an agent to drill into the detailed call-by-call view.
-            </CardDescription>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <CardTitle>Calls &amp; Telesales Dashboard</CardTitle>
+                <CardDescription>
+                  {viewMode === "personal"
+                    ? "Your activities, follow-ups, and meeting conversions in one view."
+                    : "Team-wide pulse with drill-downs per agent for managers."}
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="text-xs">
+                {viewMode === "personal" ? personalAgent || "My profile" : "Manager overview"}
+              </Badge>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
