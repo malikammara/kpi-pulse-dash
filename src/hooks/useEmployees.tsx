@@ -1,26 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { demoStore } from "@/lib/demoStore";
 import { useToast } from "@/hooks/use-toast";
-
-export interface Employee {
-  id: string;
-  name: string;
-  email: string;
-  created_at: string;
-}
+import { Employee } from "@/lib/types";
 
 export const useEmployees = () => {
   return useQuery({
     queryKey: ['employees'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('employees')
-        .select('*')
-        .order('name');
-      
-      if (error) throw error;
-      return data as Employee[];
-    }
+    queryFn: async () => demoStore.getEmployees()
   });
 };
 
@@ -29,16 +15,8 @@ export const useAddEmployee = () => {
   const { toast } = useToast();
   
   return useMutation({
-    mutationFn: async ({ name, email }: { name: string; email: string }) => {
-      const { data, error } = await supabase
-        .from('employees')
-        .insert([{ name, email }])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
-    },
+    mutationFn: async ({ name, email }: { name: string; email: string }) =>
+      demoStore.addEmployee({ name, email }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] });
       toast({
