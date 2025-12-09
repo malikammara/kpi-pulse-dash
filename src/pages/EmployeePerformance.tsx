@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ArrowUpDown, ArrowUp, ArrowDown, Trophy, Target, TrendingDown, Users } from "lucide-react";
 import { useEmployees } from "@/hooks/useEmployees";
 import { useKPIData } from "@/hooks/useKPIData";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/components/AuthProvider";
 import React, { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 

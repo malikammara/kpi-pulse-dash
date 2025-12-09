@@ -1,3 +1,4 @@
+import React, { useEffect, useMemo, useState } from "react";
 import Layout from "@/components/Layout";
 import {
   Card,
@@ -6,6 +7,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -13,561 +17,1035 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   BarChart,
   Bar,
-  XAxis,
-  YAxis,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
-  Cell,
+  XAxis,
+  YAxis,
 } from "recharts";
-import { Button } from "@/components/ui/button";
-import { useEmployees } from "@/hooks/useEmployees";
-import { useKPIData } from "@/hooks/useKPIData";
-import { useAuth } from "@/hooks/useAuth";
-import React, { useState, useMemo, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { cn } from "@/lib/utils";
 
-// -- Helpers --
-function formatNumber(num: number | null | undefined): string {
-  if (num == null) return "-";
-  return num.toLocaleString();
-}
+// Helpers
+const formatDate = (value: string) => new Date(value).toLocaleDateString();
+const formatCurrency = (value: number) =>
+  value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+const formatPercent = (value: number) => `${value.toFixed(1)}%`;
 
-function getEmployeeLabel(
-  selectedEmployee: string,
-  employees: { id: string; name: string }[]
-): string {
-  if (selectedEmployee === "all") return "All Employees";
-  const emp = employees.find((e) => e.id === selectedEmployee);
-  return emp ? emp.name : selectedEmployee;
-}
+const timeMatchesPreset = (date: string, preset: string) => {
+  const now = new Date();
+  const itemDate = new Date(date);
+  const diffDays = (now.getTime() - itemDate.getTime()) / (1000 * 60 * 60 * 24);
 
-function getWorkingDaysInMonth(year: number, month: number) {
-  let count = 0;
-  const date = new Date(year, month - 1, 1);
-  while (date.getMonth() === month - 1) {
-    const day = date.getDay();
-    if (day !== 0 && day !== 6) count++;
-    date.setDate(date.getDate() + 1);
+  if (preset === "today") {
+    return itemDate.toDateString() === now.toDateString();
   }
-  return count;
-}
+  if (preset === "last7") {
+    return diffDays <= 7 && diffDays >= 0;
+  }
+  if (preset === "last30") {
+    return diffDays <= 30 && diffDays >= 0;
+  }
+  if (preset === "week") {
+    const start = new Date(now);
+    start.setDate(now.getDate() - now.getDay());
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    return itemDate >= start && itemDate <= end;
+  }
+  if (preset === "month") {
+    return itemDate.getMonth() === now.getMonth() &&
+      itemDate.getFullYear() === now.getFullYear();
+  }
+  return true;
+};
 
-function getISOWeek(date: string | Date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
-  const yearStart = new Date(d.getFullYear(), 0, 1);
-  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-}
+const classifyMargin = (value: number) => {
+  if (value <= 500_000) return "Russell";
+  if (value <= 2_000_000) return "S&P";
+  if (value <= 10_000_000) return "Nasdaq";
+  return "Dow";
+};
 
-function getWorkingDaysInWeek(year: number, week: number, month: number) {
-  let count = 0;
-  const date = new Date(year, 0, 1 + (week - 1) * 7);
-  // Move to Monday of ISO week
-  date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
-  for (let i = 0; i < 7; i++) {
-    const thisDate = new Date(date);
-    thisDate.setDate(date.getDate() + i);
-    if (
-      thisDate.getFullYear() === year &&
-      thisDate.getMonth() + 1 === Number(month) &&
-      thisDate.getDay() !== 0 &&
-      thisDate.getDay() !== 6
-    ) {
-      count++;
+type CallLog = {
+  id: string;
+  agent: string;
+  date: string;
+  clientSegment: string;
+  meetingType: "Inbound" | "Outbound";
+  importance: number;
+  talkTime: number;
+  callsMade: number;
+  meetingAgreedTo: boolean;
+  notes?: string;
+};
+
+type ProjectedMeeting = {
+  id: string;
+  prospect: string;
+  meetingDate: string;
+  projectedMargin: number;
+  meetingType: "Inbound" | "Outbound";
+  industry: string;
+};
+
+const ProjectedMeetingsSection: React.FC<{
+  title: string;
+  data: ProjectedMeeting[];
+}> = ({ title, data }) => {
+  const [quickRange, setQuickRange] = useState<"" | "today" | "week" | "month">("");
+  const [rangeMode, setRangeMode] = useState<"" | "quick" | "custom">("");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const [classificationFilter, setClassificationFilter] = useState("all");
+  const [meetingTypeFilter, setMeetingTypeFilter] = useState("all");
+  const [industryFilter, setIndustryFilter] = useState("all");
+  type SortableKey = keyof ProjectedMeeting | "classification";
+
+  const [sortKey, setSortKey] = useState<SortableKey>("meetingDate");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  const formattedData = useMemo(
+    () =>
+      data.map((item) => ({
+        ...item,
+        classification: classifyMargin(item.projectedMargin),
+      })),
+    [data]
+  );
+
+  const filteredRows = useMemo(() => {
+    const fromDate = customFrom ? new Date(customFrom) : null;
+    const toDate = customTo ? new Date(customTo) : null;
+
+    return formattedData
+      .filter((row) => {
+        const matchesClassification =
+          classificationFilter === "all" || row.classification === classificationFilter;
+        const matchesMeetingType = meetingTypeFilter === "all" || row.meetingType === meetingTypeFilter;
+        const matchesIndustry = industryFilter === "all" || row.industry === industryFilter;
+
+        if (!matchesClassification || !matchesMeetingType || !matchesIndustry) return false;
+
+        if (rangeMode === "quick" && quickRange) {
+          return timeMatchesPreset(row.meetingDate, quickRange);
+        }
+        if (rangeMode === "custom" && (fromDate || toDate)) {
+          const current = new Date(row.meetingDate);
+          if (fromDate && current < fromDate) return false;
+          if (toDate && current > toDate) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const dir = sortDirection === "asc" ? 1 : -1;
+
+        const getValue = (row: ProjectedMeeting & { classification: string }) => {
+          switch (sortKey) {
+            case "classification":
+              return row.classification;
+            case "meetingDate":
+              return row.meetingDate;
+            case "projectedMargin":
+              return row.projectedMargin;
+            case "industry":
+              return row.industry;
+            case "meetingType":
+              return row.meetingType;
+            case "prospect":
+            default:
+              return row.prospect;
+          }
+        };
+
+        const valueA = getValue(a);
+        const valueB = getValue(b);
+
+        if (sortKey === "meetingDate") {
+          return (new Date(valueA as string).getTime() - new Date(valueB as string).getTime()) * dir;
+        }
+        if (sortKey === "projectedMargin") {
+          return ((valueA as number) - (valueB as number)) * dir;
+        }
+        return String(valueA).localeCompare(String(valueB)) * dir;
+      });
+  }, [classificationFilter, meetingTypeFilter, industryFilter, quickRange, rangeMode, customFrom, customTo, formattedData, sortDirection, sortKey]);
+
+  const totalProjectedMargin = useMemo(
+    () => filteredRows.reduce((sum, row) => sum + row.projectedMargin, 0),
+    [filteredRows]
+  );
+
+  const toggleSort = (key: SortableKey) => {
+    if (sortKey === key) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDirection("asc");
     }
-  }
-  return count;
-}
+  };
 
-const ProgressBar = ({ value }: { value: number }) => (
-  <div className="h-2 w-full bg-gray-200 rounded">
-    <div
-      className="h-2 rounded"
-      style={{
-        width: `${Math.min(value, 100)}%`,
-        background:
-          value >= 100
-            ? "#22c55e"
-            : value >= 50
-            ? "#f59e42"
-            : "#f87171",
-        transition: "width 0.4s",
-      }}
-    ></div>
-  </div>
-);
+  const resetFilters = () => {
+    setQuickRange("");
+    setRangeMode("");
+    setCustomFrom("");
+    setCustomTo("");
+    setClassificationFilter("all");
+    setMeetingTypeFilter("all");
+    setIndustryFilter("all");
+  };
 
-// -- Main Component --
+  return (
+    <Card className="shadow-sm">
+      <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>
+            Time filters are mutually exclusive. Sorting works on every column with a clear arrow indicator.
+          </CardDescription>
+        </div>
+        <Badge variant="outline" className="text-base font-semibold">
+          Total Projected Margin: PKR {formatCurrency(totalProjectedMargin)}
+        </Badge>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="space-y-2">
+            <Label>Quick View</Label>
+              <Select
+                disabled={rangeMode === "custom"}
+                value={rangeMode === "quick" ? quickRange : ""}
+                onValueChange={(value: "today" | "week" | "month" | "") => {
+                  setQuickRange(value);
+                  setRangeMode("quick");
+                  setCustomFrom("");
+                  setCustomTo("");
+                }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select quick range" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="week">This Week</SelectItem>
+                <SelectItem value="month">This Month</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>From date</Label>
+            <input
+              type="date"
+              className="w-full rounded border px-3 py-2 text-sm"
+              disabled={rangeMode === "quick"}
+              value={customFrom}
+              onChange={(e) => {
+                setRangeMode("custom");
+                setQuickRange("");
+                setCustomFrom(e.target.value);
+              }}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>To date</Label>
+            <input
+              type="date"
+              className="w-full rounded border px-3 py-2 text-sm"
+              disabled={rangeMode === "quick"}
+              value={customTo}
+              onChange={(e) => {
+                setRangeMode("custom");
+                setQuickRange("");
+                setCustomTo(e.target.value);
+              }}
+            />
+          </div>
+          <div className="space-y-2 flex items-end">
+            <Button variant="outline" className="w-full" onClick={resetFilters}>
+              Clear Filters
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label>Classification</Label>
+            <Select value={classificationFilter} onValueChange={setClassificationFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="All" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="Russell">Russell (≤ 500k)</SelectItem>
+                <SelectItem value="S&P">S&P (500,001 – 2,000,000)</SelectItem>
+                <SelectItem value="Nasdaq">Nasdaq (2,000,001 – 10,000,000)</SelectItem>
+                <SelectItem value="Dow">Dow (&gt; 10,000,000)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Meeting Type</Label>
+            <Select value={meetingTypeFilter} onValueChange={setMeetingTypeFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="All" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="Inbound">Inbound</SelectItem>
+                <SelectItem value="Outbound">Outbound</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Industry</Label>
+            <Select value={industryFilter} onValueChange={setIndustryFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="All" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                {[...new Set(data.map((d) => d.industry))].map((industry) => (
+                  <SelectItem key={industry} value={industry}>
+                    {industry}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {[
+                  { key: "prospect", label: "Prospect" },
+                  { key: "meetingDate", label: "Meeting Date" },
+                  { key: "meetingType", label: "Meeting Type" },
+                  { key: "industry", label: "Industry" },
+                  { key: "classification", label: "Classification" },
+                  { key: "projectedMargin", label: "Projected Margin" },
+                ].map((col) => (
+                  <TableHead
+                    key={col.key}
+                    className="cursor-pointer select-none"
+                    onClick={() => toggleSort(col.key as SortableKey)}
+                  >
+                    <div className="flex items-center gap-1">
+                      {col.label}
+                      {sortKey === col.key ? (
+                        <span>{sortDirection === "asc" ? "▲" : "▼"}</span>
+                      ) : (
+                        <span className="text-muted-foreground">▲</span>
+                      )}
+                    </div>
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredRows.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell className="font-semibold">{row.prospect}</TableCell>
+                  <TableCell>{formatDate(row.meetingDate)}</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{row.meetingType}</Badge>
+                  </TableCell>
+                  <TableCell>{row.industry}</TableCell>
+                  <TableCell>{row.classification}</TableCell>
+                  <TableCell className="text-right">
+                    PKR {formatCurrency(row.projectedMargin)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 const Dashboard: React.FC = () => {
-  const [selectedEmployee, setSelectedEmployee] = useState("all");
-  const [selectedMonth, setSelectedMonth] = useState(() => {
-  const currentMonth = new Date().getMonth() + 1;
-    return currentMonth.toString();
-  });
-
-  const [selectedViewType, setSelectedViewType] = useState("Monthly");
-  const [selectedWeek, setSelectedWeek] = useState("1");
-  const [selectedDay, setSelectedDay] = useState(
-    new Date().toISOString().slice(0, 10)
+  const callLogs: CallLog[] = useMemo(
+    () => [
+      {
+        id: "1",
+        agent: "Aisha Khan",
+        date: new Date().toISOString(),
+        clientSegment: "SME",
+        meetingType: "Inbound",
+        importance: 5,
+        talkTime: 12,
+        callsMade: 1,
+        meetingAgreedTo: true,
+        notes: "Requested follow-up deck",
+      },
+      {
+        id: "2",
+        agent: "Aisha Khan",
+        date: new Date(Date.now() - 2 * 86400000).toISOString(),
+        clientSegment: "Enterprise",
+        meetingType: "Outbound",
+        importance: 4,
+        talkTime: 9,
+        callsMade: 1,
+        meetingAgreedTo: false,
+        notes: "Needs budget approval",
+      },
+      {
+        id: "3",
+        agent: "Bilal Sheikh",
+        date: new Date(Date.now() - 6 * 86400000).toISOString(),
+        clientSegment: "Retail",
+        meetingType: "Outbound",
+        importance: 3,
+        talkTime: 6,
+        callsMade: 1,
+        meetingAgreedTo: true,
+        notes: "Converted to trial",
+      },
+      {
+        id: "4",
+        agent: "Bilal Sheikh",
+        date: new Date(Date.now() - 15 * 86400000).toISOString(),
+        clientSegment: "SME",
+        meetingType: "Inbound",
+        importance: 2,
+        talkTime: 4,
+        callsMade: 1,
+        meetingAgreedTo: false,
+      },
+      {
+        id: "5",
+        agent: "Maria Ahmed",
+        date: new Date(Date.now() - 20 * 86400000).toISOString(),
+        clientSegment: "Enterprise",
+        meetingType: "Outbound",
+        importance: 5,
+        talkTime: 15,
+        callsMade: 1,
+        meetingAgreedTo: true,
+        notes: "High potential account",
+      },
+      {
+        id: "6",
+        agent: "Maria Ahmed",
+        date: new Date(Date.now() - 1 * 86400000).toISOString(),
+        clientSegment: "Retail",
+        meetingType: "Inbound",
+        importance: 1,
+        talkTime: 3,
+        callsMade: 1,
+        meetingAgreedTo: false,
+      },
+      {
+        id: "7",
+        agent: "Sunil Kumar",
+        date: new Date(Date.now() - 9 * 86400000).toISOString(),
+        clientSegment: "SME",
+        meetingType: "Outbound",
+        importance: 4,
+        talkTime: 8,
+        callsMade: 1,
+        meetingAgreedTo: true,
+      },
+      {
+        id: "8",
+        agent: "Sunil Kumar",
+        date: new Date(Date.now() - 25 * 86400000).toISOString(),
+        clientSegment: "Enterprise",
+        meetingType: "Inbound",
+        importance: 5,
+        talkTime: 14,
+        callsMade: 1,
+        meetingAgreedTo: true,
+        notes: "Interested in premium tier",
+      },
+    ],
+    []
   );
-  const currentYear = new Date().getFullYear();
-  const [selectedYear] = useState(String(currentYear));
 
-  const { user, isAdmin } = useAuth();
-  const { data: employees = [] } = useEmployees();
-  const myEmployee = useMemo(
-    () => employees.find((e) => e.email === user?.email),
-    [employees, user]
+  const prospectMeetings: ProjectedMeeting[] = useMemo(
+    () => [
+      {
+        id: "p1",
+        prospect: "Alpha Textiles",
+        meetingDate: new Date().toISOString(),
+        meetingType: "Inbound",
+        industry: "Manufacturing",
+        projectedMargin: 450_000,
+      },
+      {
+        id: "p2",
+        prospect: "Blue Fin Securities",
+        meetingDate: new Date(Date.now() + 2 * 86400000).toISOString(),
+        meetingType: "Outbound",
+        industry: "Financial Services",
+        projectedMargin: 5_750_000,
+      },
+      {
+        id: "p3",
+        prospect: "Civic Builders",
+        meetingDate: new Date(Date.now() + 6 * 86400000).toISOString(),
+        meetingType: "Outbound",
+        industry: "Construction",
+        projectedMargin: 1_200_000,
+      },
+      {
+        id: "p4",
+        prospect: "Dynamic Labs",
+        meetingDate: new Date(Date.now() + 12 * 86400000).toISOString(),
+        meetingType: "Inbound",
+        industry: "Technology",
+        projectedMargin: 11_000_000,
+      },
+    ],
+    []
   );
 
-  // Ensure non-admins cannot select other employees
+  const closingCases: ProjectedMeeting[] = useMemo(
+    () => [
+      {
+        id: "c1",
+        prospect: "Emerald Motors",
+        meetingDate: new Date(Date.now() - 1 * 86400000).toISOString(),
+        meetingType: "Inbound",
+        industry: "Automotive",
+        projectedMargin: 800_000,
+      },
+      {
+        id: "c2",
+        prospect: "Frontier Foods",
+        meetingDate: new Date(Date.now() + 3 * 86400000).toISOString(),
+        meetingType: "Outbound",
+        industry: "Consumer Goods",
+        projectedMargin: 2_400_000,
+      },
+      {
+        id: "c3",
+        prospect: "Grand Hotels",
+        meetingDate: new Date(Date.now() + 10 * 86400000).toISOString(),
+        meetingType: "Inbound",
+        industry: "Hospitality",
+        projectedMargin: 9_200_000,
+      },
+      {
+        id: "c4",
+        prospect: "Harbor Logistics",
+        meetingDate: new Date(Date.now() + 16 * 86400000).toISOString(),
+        meetingType: "Outbound",
+        industry: "Logistics",
+        projectedMargin: 12_500_000,
+      },
+    ],
+    []
+  );
+
+  const agents = useMemo(
+    () => Array.from(new Set(callLogs.map((log) => log.agent))),
+    [callLogs]
+  );
+
+  const [viewMode, setViewMode] = useState<"personal" | "manager">("personal");
+  const [personalAgent, setPersonalAgent] = useState(callLogs[0]?.agent ?? "");
+  const [callTimePreset, setCallTimePreset] = useState<"today" | "last7" | "last30" | "custom">("last7");
+  const [callCustomFrom, setCallCustomFrom] = useState("");
+  const [callCustomTo, setCallCustomTo] = useState("");
+  const [segmentFilter, setSegmentFilter] = useState("all");
+  const [callMeetingType, setCallMeetingType] = useState("all");
+  const [importanceFilter, setImportanceFilter] = useState("all");
+  const [talkTimeFilter, setTalkTimeFilter] = useState("all");
+  const [activeAgent, setActiveAgent] = useState<string | null>(null);
+
   useEffect(() => {
-    if (!isAdmin && selectedEmployee !== 'all' && selectedEmployee !== myEmployee?.id) {
-      setSelectedEmployee('all');
+    if (!agents.includes(personalAgent) && agents.length > 0) {
+      setPersonalAgent(agents[0]);
     }
-  }, [isAdmin, selectedEmployee, myEmployee]);
-  
-  // Optimize data fetching - only get data for selected filters
-  const { data: kpiData = [], isLoading } = useKPIData({
-    employeeId: selectedEmployee === "all" ? undefined : selectedEmployee,
-    ...(selectedViewType === "Monthly" && { month: selectedMonth }),
-    year: selectedYear,
-  });
+  }, [agents, personalAgent]);
 
-  // Set week options for selected month/year
-  const weekSet = new Set<number>();
-  kpiData.forEach((rec: any) => {
-    if (rec.date) weekSet.add(getISOWeek(rec.date));
-  });
-  const weeksInData = Array.from(weekSet).sort((a, b) => a - b);
-  const weekOptions =
-    weeksInData.length > 0
-      ? weeksInData
-      : [1, 2, 3, 4, 5]; // fallback
+  useEffect(() => {
+    if (viewMode === "personal") {
+      setActiveAgent(personalAgent);
+    } else {
+      setActiveAgent(null);
+    }
+  }, [viewMode, personalAgent]);
 
-  // KPI targets & weights
-  const kpiTargets = {
-    margin: 3000000,
-    calls: 1540,
-    leads_generated: 1100,
-    solo_closing: 1,
-    out_house_meetings: 44,
-    in_house_meetings: 22,
-    product_knowledge: 100,
-    smd: 100,
-  };
+  const filteredCalls = useMemo(() => {
+    const fromDate = callCustomFrom ? new Date(callCustomFrom) : null;
+    const toDate = callCustomTo ? new Date(callCustomTo) : null;
+    const preset = callTimePreset;
 
-  const kpiWeights = {
-    margin: 30,
-    calls: 20,
-    leads_generated: 5,
-    solo_closing: 10,
-    out_house_meetings: 10,
-    in_house_meetings: 15,
-    product_knowledge: 5,
-    smd: 5,
-  };
+    return callLogs.filter((log) => {
+      const matchesAudience = viewMode === "manager" || log.agent === personalAgent;
 
-  // Working Days Calculation
-  const year = Number(selectedYear);
-  const month = Number(selectedMonth);
-  const workingDaysInMonth = getWorkingDaysInMonth(year, month);
-  let workingDaysInPeriod = workingDaysInMonth;
+      if (!matchesAudience) return false;
 
-  if (selectedViewType === "Weekly") {
-    workingDaysInPeriod = getWorkingDaysInWeek(year, Number(selectedWeek), month);
-  } else if (selectedViewType === "Daily") {
-    const dayDate = new Date(selectedDay);
-    workingDaysInPeriod =
-      dayDate.getDay() !== 0 && dayDate.getDay() !== 6 ? 1 : 0;
-  }
+      const matchesPreset =
+        preset === "custom"
+          ? (() => {
+              const current = new Date(log.date);
+              if (fromDate && current < fromDate) return false;
+              if (toDate && current > toDate) return false;
+              return true;
+            })()
+          : timeMatchesPreset(log.date, preset);
 
-  const periodMultiplier = workingDaysInMonth
-    ? workingDaysInPeriod / workingDaysInMonth
-    : 1;
-    const employeeMultiplier =
-  selectedEmployee === "all" ? employees.length-2 : 1;
+      const matchesSegment = segmentFilter === "all" || log.clientSegment === segmentFilter;
+      const matchesMeetingType = callMeetingType === "all" || log.meetingType === callMeetingType;
+      const matchesImportance =
+        importanceFilter === "all" || log.importance >= Number(importanceFilter);
 
-  const adjustedKpiTargets = Object.fromEntries(
-    Object.entries(kpiTargets).map(([k, v]) => {
-      const monthlyOnly = k === "product_knowledge" || k === "smd";
-      const multiplier = (monthlyOnly ? 1 : periodMultiplier) * employeeMultiplier;
-      return [k, Math.round(v * multiplier)];
-    })
+      const matchesTalkTime = (() => {
+        if (talkTimeFilter === "all") return true;
+        if (talkTimeFilter === "short") return log.talkTime < 5;
+        if (talkTimeFilter === "medium") return log.talkTime >= 5 && log.talkTime <= 10;
+        if (talkTimeFilter === "long") return log.talkTime > 10;
+        return true;
+      })();
+
+      return matchesPreset && matchesSegment && matchesMeetingType && matchesImportance && matchesTalkTime;
+    });
+  }, [callLogs, viewMode, personalAgent, callTimePreset, callCustomFrom, callCustomTo, segmentFilter, callMeetingType, importanceFilter, talkTimeFilter]);
+
+  const agentSummaries = useMemo(() => {
+    const map = new Map<string, { calls: number; meetings: number; talkTime: number }>();
+
+    filteredCalls.forEach((log) => {
+      const existing = map.get(log.agent) || { calls: 0, meetings: 0, talkTime: 0 };
+      existing.calls += log.callsMade;
+      existing.meetings += log.meetingAgreedTo ? 1 : 0;
+      existing.talkTime += log.talkTime;
+      map.set(log.agent, existing);
+    });
+
+    return Array.from(map.entries()).map(([agent, stats]) => {
+      const conversion = stats.calls > 0 ? (stats.meetings / stats.calls) * 100 : 0;
+      const averageTalk = stats.calls > 0 ? stats.talkTime / stats.calls : 0;
+      return {
+        agent,
+        totalCalls: stats.calls,
+        meetings: stats.meetings,
+        conversion,
+        averageTalk,
+      };
+    });
+  }, [filteredCalls]);
+
+  const holisticTotals = useMemo(() => {
+    const calls = filteredCalls.reduce((sum, log) => sum + log.callsMade, 0);
+    const meetings = filteredCalls.filter((log) => log.meetingAgreedTo).length;
+    const conversion = calls > 0 ? (meetings / calls) * 100 : 0;
+    const topSegment = (() => {
+      const counts = new Map<string, number>();
+      filteredCalls.forEach((log) => counts.set(log.clientSegment, (counts.get(log.clientSegment) || 0) + 1));
+      const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+      return sorted[0]?.[0] ?? "-";
+    })();
+    return {
+      calls,
+      meetings,
+      conversion,
+      topSegment,
+    };
+  }, [filteredCalls]);
+
+  const agentDetailLogs = useMemo(
+    () =>
+      filteredCalls.filter((log) =>
+        activeAgent ? log.agent === activeAgent : true
+      ),
+    [filteredCalls, activeAgent]
   );
 
+  const kpiTargets = [
+    { key: "initial_margin_deposit", label: "Initial Margin Deposit", target: 3_000_000, weight: 30, unit: "PKR", value: 2_450_000 },
+    { key: "calls", label: "Calls", target: 70, weight: 20, unit: "Calls", value: holisticTotals.calls },
+    { key: "in_house_meetings", label: "In-House Meetings", target: 1, weight: 15, unit: "Meetings", value: holisticTotals.meetings },
+    { key: "out_house_meetings", label: "Out-House Meetings", target: 2, weight: 10, unit: "Meetings", value: 3 },
+    { key: "independent_closures", label: "Independent Closures", target: 10, weight: 10, unit: "%", value: 8 },
+    { key: "sales_management_discipline", label: "Sales Management Discipline", target: 5, weight: 5, unit: "%", value: 4 },
+    { key: "product_knowledge", label: "Product Knowledge", target: 5, weight: 5, unit: "%", value: 3.5 },
+    { key: "crm_dashboard_compliance", label: "CRM Dashboard Compliance", target: 100, weight: 5, unit: "%", value: 92 },
+    { key: "solo_accounts_closure", label: "Solo Accounts Closure", target: 1, weight: 5, unit: "Closures", value: 1 },
+    { key: "lead_generation", label: "Lead Generation", target: 50, weight: 5, unit: "Leads", value: 37 },
+  ];
 
-  // FILTER KPI DATA
-  const filteredKpiData = useMemo(() => {
-    if (!kpiData.length) return [];
-    if (selectedViewType === "Monthly") {
-      return kpiData.filter(
-        (rec: any) =>
-          new Date(rec.date).getMonth() + 1 === Number(selectedMonth) &&
-          new Date(rec.date).getFullYear() === Number(selectedYear)
-      );
-    } else if (selectedViewType === "Weekly") {
-      return kpiData.filter(
-        (rec: any) =>
-          getISOWeek(rec.date) === Number(selectedWeek) &&
-          new Date(rec.date).getFullYear() === Number(selectedYear) &&
-          new Date(rec.date).getMonth() + 1 === Number(selectedMonth)
-      );
-    } else if (selectedViewType === "Daily") {
-      return kpiData.filter(
-        (rec: any) =>
-          rec.date &&
-          rec.date.slice(0, 10) === selectedDay &&
-          new Date(rec.date).getFullYear() === Number(selectedYear)
-      );
-    }
-    return kpiData;
-  }, [kpiData, selectedMonth, selectedWeek, selectedDay, selectedViewType, selectedYear]);
-  // Always-Monthly slice (ignore selectedViewType)
-  const monthlyKpiData = useMemo(() => {
-    if (!kpiData.length) return [];
-    return kpiData.filter(
-      (rec: any) =>
-        new Date(rec.date).getMonth() + 1 === Number(selectedMonth) &&
-        new Date(rec.date).getFullYear() === Number(selectedYear)
-    );
-  }, [kpiData, selectedMonth, selectedYear]);
-
-  // AGGREGATE KPI DATA
-  const aggregatedKPIs = useMemo(() => {
-    // Sums for count KPIs (respect Weekly/Daily/Monthly selection)
-    const totals = {
-      margin: 0,
-      calls: 0,
-      leads_generated: 0,
-      solo_closing: 0,
-      out_house_meetings: 0,
-      in_house_meetings: 0,
-    };
-
-    // --- 3a) Count KPIs from filteredKpiData (unchanged behavior) ---
-    filteredKpiData.forEach((record: any) => {
-      totals.margin += record.margin || 0;
-      totals.calls += record.calls || 0;
-      totals.leads_generated += record.leads_generated || 0;
-      totals.solo_closing += record.solo_closing || 0;
-      totals.out_house_meetings += record.out_house_meetings || 0;
-      totals.in_house_meetings += record.in_house_meetings || 0;
-    });
-
-    // --- 3b) % KPIs (Knowledge, SMD) from MONTHLY data regardless of view ---
-    const knowledgeByEmp = new Map<string, number>();
-    const smdByEmp = new Map<string, number>();
-
-    monthlyKpiData.forEach((record: any) => {
-      const empId =
-        record.employeeId ??
-        record.employee_id ??
-        record.empId ??
-        record.emp_id ??
-        "unknown";
-
-      if (record.product_knowledge != null) {
-        const prev = knowledgeByEmp.get(empId) ?? 0;
-        knowledgeByEmp.set(empId, Math.max(prev, Number(record.product_knowledge)));
-      }
-      if (record.smd != null) {
-        const prev = smdByEmp.get(empId) ?? 0;
-        smdByEmp.set(empId, Math.max(prev, Number(record.smd)));
-      }
-    });
-
-    const sumValues = (m: Map<string, number>) =>
-      Array.from(m.values()).reduce((a, b) => a + b, 0);
-
-    const product_knowledge = sumValues(knowledgeByEmp);
-    const smd = sumValues(smdByEmp);
-
-    return [
-      { key: "margin",             title: "Margin",  achieved: totals.margin,              target: adjustedKpiTargets.margin,             weight: kpiWeights.margin,             unit: ""  },
-      { key: "calls",              title: "Calls",   achieved: totals.calls,               target: adjustedKpiTargets.calls,              weight: kpiWeights.calls,              unit: ""  },
-      { key: "leads_generated",    title: "Leads",   achieved: totals.leads_generated,     target: adjustedKpiTargets.leads_generated,    weight: kpiWeights.leads_generated,    unit: ""  },
-      { key: "solo_closing",       title: "Solo",    achieved: totals.solo_closing,        target: adjustedKpiTargets.solo_closing,       weight: kpiWeights.solo_closing,       unit: ""  },
-      { key: "out_house_meetings", title: "OH",      achieved: totals.out_house_meetings,  target: adjustedKpiTargets.out_house_meetings, weight: kpiWeights.out_house_meetings, unit: ""  },
-      { key: "in_house_meetings",  title: "IH",      achieved: totals.in_house_meetings,   target: adjustedKpiTargets.in_house_meetings,  weight: kpiWeights.in_house_meetings,  unit: ""  },
-      // % KPIs use monthly-only achieved + monthly-only target (no period scaling)
-      { key: "product_knowledge",  title: "Knowledge", achieved: product_knowledge, target: adjustedKpiTargets.product_knowledge, weight: kpiWeights.product_knowledge, unit: "%" },
-      { key: "smd",                title: "SMD",       achieved: smd,              target: adjustedKpiTargets.smd,              weight: kpiWeights.smd,              unit: "%" },
-    ];
-  }, [filteredKpiData, monthlyKpiData, adjustedKpiTargets, kpiWeights]);
-
-  // Weighted score
-  const overallScore = useMemo(() => {
-    const weightedSum = aggregatedKPIs.reduce((sum, kpi) => {
-      const pct = Math.min(kpi.achieved / (kpi.target || 1), 1); // Cap at 100%
-      return sum + pct * kpi.weight;
-    }, 0);
-    return Math.round(weightedSum);
-  }, [aggregatedKPIs]);
-
-  // Chart data
-  const chartData = aggregatedKPIs.map((kpi) => {
-    const pct = (kpi.achieved / (kpi.target || 1)) * 100;
-    let color = "#f87171";
-    if (pct >= 100) color = "#22c55e";
-    else if (pct >= 50) color = "#f59e42";
+  const kpiChartData = kpiTargets.map((kpi) => {
+    const progress = Math.min((kpi.value / kpi.target) * 100, 120);
     return {
-      name: kpi.title,
-      Performance: Math.min(pct, 100),
-      fill: color,
+      name: kpi.label,
+      progress,
+      value: kpi.value,
+      target: kpi.target,
+      weight: kpi.weight,
+      unit: kpi.unit,
     };
   });
 
-  const months = [
-    { value: "1", label: "January" },
-    { value: "2", label: "February" },
-    { value: "3", label: "March" },
-    { value: "4", label: "April" },
-    { value: "5", label: "May" },
-    { value: "6", label: "June" },
-    { value: "7", label: "July" },
-    { value: "8", label: "August" },
-    { value: "9", label: "September" },
-    { value: "10", label: "October" },
-    { value: "11", label: "November" },
-    { value: "12", label: "December" },
-  ];
-
-  const viewTypes = [
-    { value: "Monthly", label: "Monthly" },
-    { value: "Weekly", label: "Weekly" },
-    { value: "Daily", label: "Daily" },
-  ];
+  const weightedScore = useMemo(() => {
+    const total = kpiChartData.reduce((sum, kpi) => sum + (Math.min(kpi.progress, 100) / 100) * kpi.weight, 0);
+    return total.toFixed(1);
+  }, [kpiChartData]);
 
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Title */}
-        <div className="mb-2">
-          <h1 className="text-3xl font-bold text-foreground">KPI Dashboard</h1>
-          <p className="text-muted-foreground mt-2">
-            Monitor employee performance with real-time KPI analytics
-          </p>
-        </div>
-
-        {/* Filters */}
-        <div className="flex flex-wrap gap-4 mb-8 items-end bg-white p-4 rounded-lg shadow-sm">
-          <div>
-            <Label className="text-xs text-muted-foreground mb-1 block">
-              Select Employee
-            </Label>
-            <Select
-              value={selectedEmployee}
-              onValueChange={setSelectedEmployee}
-            >
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="All Employees" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Employees</SelectItem>
-                {isAdmin
-                  ? employees.map((employee: any) => (
-                      <SelectItem key={employee.id} value={employee.id}>
-                        {employee.name}
-                      </SelectItem>
-                    ))
-                  : myEmployee && (
-                      <SelectItem value={myEmployee.id}>{myEmployee.name}</SelectItem>
-                    )}
-              </SelectContent>
-            </Select>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex-1 space-y-1">
+            <h1 className="text-3xl font-bold text-foreground">BD Performance Cockpit</h1>
+            <p className="text-muted-foreground">
+              Switch between your personal workspace and the manager control tower to track calls, KPIs, and upcoming meetings.
+            </p>
           </div>
-          <div>
-            <Label className="text-xs text-muted-foreground mb-1 block">
-              Month
-            </Label>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {months.map((month) => (
-                  <SelectItem key={month.value} value={month.value}>
-                    {month.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs text-muted-foreground mb-1 block">
-              View Type
-            </Label>
-            <Select
-              value={selectedViewType}
-              onValueChange={setSelectedViewType}
-            >
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {viewTypes.map((v) => (
-                  <SelectItem key={v.value} value={v.value}>
-                    {v.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {selectedViewType === "Weekly" && (
-            <div>
-              <Label className="text-xs text-muted-foreground mb-1 block">
-                Week
-              </Label>
-              <Select value={selectedWeek} onValueChange={setSelectedWeek}>
-                <SelectTrigger className="w-24">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {weekOptions.map((w) => (
-                    <SelectItem key={w} value={w.toString()}>
-                      Week {w}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-          {selectedViewType === "Daily" && (
-            <div>
-              <Label className="text-xs text-muted-foreground mb-1 block">
-                Day
-              </Label>
-              <input
-                type="date"
-                className="border rounded px-2 py-1 w-36 text-sm"
-                value={selectedDay}
-                onChange={(e) => setSelectedDay(e.target.value)}
-                max={new Date().toISOString().slice(0, 10)}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Score + Chart section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {/* Score Card */}
-          <Card className="flex flex-col items-center justify-center h-56 shadow-md" style={{ height: "auto" }}>
-            <div className="text-xs text-muted-foreground mb-2">
-              Weighted performance score for {getEmployeeLabel(selectedEmployee, employees)} ({selectedViewType.toLowerCase()} view)
-            </div>
-            <div className="text-6xl font-bold mb-2">{overallScore}%</div>
-            <div className="text-lg text-muted-foreground">
-              {selectedViewType} performance
-            </div>
-          </Card>
-          {/* KPI Performance Chart */}
-          <Card className="shadow-md">
-            <CardHeader>
-              <CardTitle>KPI Performance</CardTitle>
-              <CardDescription>
-                Achieved vs Target KPIs for the {selectedViewType.toLowerCase()}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} barSize={32}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                    <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} />
-                    <Tooltip
-                      formatter={(value) => `${Number(value).toFixed(2)}%`}
-                      labelFormatter={(label) => `${label}`}
-                    />
-                    <Bar dataKey="Performance">
-                      {chartData.map((entry, idx) => (
-                        <Cell key={`cell-${idx}`} fill={entry.fill} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+          <Card className="w-full max-w-xl shadow-sm">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">Audience</p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant={viewMode === "personal" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setViewMode("personal")}
+                    >
+                      My Dashboard
+                    </Button>
+                    <Button
+                      variant={viewMode === "manager" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setViewMode("manager")}
+                    >
+                      Manager View
+                    </Button>
+                  </div>
+                </div>
+                <Badge variant="secondary" className="text-xs">
+                  {viewMode === "personal" ? "Individual focus" : "Team-wide visibility"}
+                </Badge>
               </div>
+              {viewMode === "personal" && (
+                <div className="space-y-1">
+                  <Label>Choose your profile</Label>
+                  <Select
+                    value={personalAgent}
+                    onValueChange={(value) => {
+                      setPersonalAgent(value);
+                      setActiveAgent(value);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select agent" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {agents.map((agent) => (
+                        <SelectItem key={agent} value={agent}>
+                          {agent}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Admin-only Employee Performance Link */}
-        {isAdmin && (
-          <div className="mb-8">
-            <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200 shadow-sm">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-blue-900 mb-2">
-                      Employee Performance Analysis
-                    </h3>
-                    <p className="text-blue-700 text-sm">
-                      Compare individual employee performance, sort by KPIs, and identify top performers
-                    </p>
+        {/* Calls & Telesales Dashboard */}
+        <Card className="shadow-sm">
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <CardTitle>Calls &amp; Telesales Dashboard</CardTitle>
+                <CardDescription>
+                  {viewMode === "personal"
+                    ? "Your activities, follow-ups, and meeting conversions in one view."
+                    : "Team-wide pulse with drill-downs per agent for managers."}
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="text-xs">
+                {viewMode === "personal" ? personalAgent || "My profile" : "Manager overview"}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className="space-y-1">
+                <Label>Time Period</Label>
+                <Select value={callTimePreset} onValueChange={(value: "today" | "last7" | "last30" | "custom") => setCallTimePreset(value)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="today">Today</SelectItem>
+                    <SelectItem value="last7">Last 7 Days</SelectItem>
+                    <SelectItem value="last30">Last 30 Days</SelectItem>
+                    <SelectItem value="custom">Custom Range</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {callTimePreset === "custom" && (
+                <>
+                  <div className="space-y-1">
+                    <Label>From</Label>
+                    <input
+                      type="date"
+                      className="w-full rounded border px-3 py-2 text-sm"
+                      value={callCustomFrom}
+                      onChange={(e) => setCallCustomFrom(e.target.value)}
+                    />
                   </div>
-                  <Link to="/employee-performance">
-                    <Button className="bg-blue-600 hover:bg-blue-700 text-white">
-                      View Employee Analysis →
-                    </Button>
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+                  <div className="space-y-1">
+                    <Label>To</Label>
+                    <input
+                      type="date"
+                      className="w-full rounded border px-3 py-2 text-sm"
+                      value={callCustomTo}
+                      onChange={(e) => setCallCustomTo(e.target.value)}
+                    />
+                  </div>
+                </>
+              )}
+              <div className="space-y-1">
+                <Label>Client Segment</Label>
+                <Select value={segmentFilter} onValueChange={setSegmentFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    {[...new Set(callLogs.map((log) => log.clientSegment))].map((segment) => (
+                      <SelectItem key={segment} value={segment}>
+                        {segment}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Meeting Type</Label>
+                <Select value={callMeetingType} onValueChange={setCallMeetingType}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="Inbound">Inbound</SelectItem>
+                    <SelectItem value="Outbound">Outbound</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Importance (min stars)</Label>
+                <Select value={importanceFilter} onValueChange={setImportanceFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    {[1, 2, 3, 4, 5].map((value) => (
+                      <SelectItem key={value} value={value.toString()}>
+                        {"★".repeat(value)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label>Average Talk Time</Label>
+                <Select value={talkTimeFilter} onValueChange={setTalkTimeFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All</SelectItem>
+                    <SelectItem value="short">Under 5 mins</SelectItem>
+                    <SelectItem value="medium">5 - 10 mins</SelectItem>
+                    <SelectItem value="long">Over 10 mins</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-        {/* KPI Metric Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {isLoading
-            ? Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="animate-pulse">
-                  <div className="h-32 bg-gray-100 rounded-lg"></div>
-                </div>
-              ))
-            : aggregatedKPIs.map((kpi, idx) => {
-                const percent = Math.min(
-                  (kpi.achieved / (kpi.target || 1)) * 100,
-                  100
-                );
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card className="bg-gradient-to-r from-blue-50 to-blue-100">
+                <CardContent className="p-4">
+                  <p className="text-sm text-muted-foreground">Total Calls</p>
+                  <p className="text-3xl font-bold">{holisticTotals.calls}</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-gradient-to-r from-emerald-50 to-emerald-100">
+                <CardContent className="p-4">
+                  <p className="text-sm text-muted-foreground">Meetings Agreed</p>
+                  <p className="text-3xl font-bold">{holisticTotals.meetings}</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-gradient-to-r from-amber-50 to-amber-100">
+                <CardContent className="p-4">
+                  <p className="text-sm text-muted-foreground">Conversion Ratio</p>
+                  <p className="text-3xl font-bold">{holisticTotals.conversion.toFixed(1)}%</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-gradient-to-r from-purple-50 to-purple-100">
+                <CardContent className="p-4">
+                  <p className="text-sm text-muted-foreground">Top Client Segment</p>
+                  <p className="text-3xl font-bold">{holisticTotals.topSegment}</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Agent</TableHead>
+                    <TableHead>Total Calls</TableHead>
+                    <TableHead>Meetings</TableHead>
+                    <TableHead>Conversion Ratio</TableHead>
+                    <TableHead>Avg Talk Time</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {agentSummaries.map((agent) => (
+                    <TableRow
+                      key={agent.agent}
+                      className={cn("cursor-pointer", activeAgent === agent.agent && "bg-muted")}
+                      onClick={() => setActiveAgent(agent.agent)}
+                    >
+                      <TableCell className="font-semibold text-primary underline">
+                        {agent.agent}
+                      </TableCell>
+                      <TableCell>{agent.totalCalls}</TableCell>
+                      <TableCell>{agent.meetings}</TableCell>
+                      <TableCell>{agent.conversion.toFixed(1)}%</TableCell>
+                      <TableCell>{agent.averageTalk.toFixed(1)} mins</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Call-by-Call Detail</h3>
+                {activeAgent && (
+                  <Button variant="ghost" size="sm" onClick={() => setActiveAgent(null)}>
+                    Clear agent selection
+                  </Button>
+                )}
+              </div>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Agent</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Client Segment</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Importance</TableHead>
+                      <TableHead>Talk Time</TableHead>
+                      <TableHead>Meeting?</TableHead>
+                      <TableHead>Notes</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {agentDetailLogs.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell>{log.agent}</TableCell>
+                        <TableCell>{formatDate(log.date)}</TableCell>
+                        <TableCell>{log.clientSegment}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{log.meetingType}</Badge>
+                        </TableCell>
+                        <TableCell>{"★".repeat(log.importance)}</TableCell>
+                        <TableCell>{log.talkTime} mins</TableCell>
+                        <TableCell>{log.meetingAgreedTo ? "Yes" : "No"}</TableCell>
+                        <TableCell className="max-w-xs truncate" title={log.notes}>
+                          {log.notes || "-"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ProjectedMeetingsSection title="Projected Meetings – Prospects" data={prospectMeetings} />
+          <ProjectedMeetingsSection title="Projected Meetings – Closing Cases" data={closingCases} />
+        </div>
+
+        <Card className="shadow-sm">
+          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle>KPI Overview Dashboard</CardTitle>
+              <CardDescription>
+                Weighted KPIs with normalized progress, interactive tooltips, and an aggregated weighted score.
+              </CardDescription>
+            </div>
+            <Badge variant="secondary" className="text-base">
+              Overall Weighted Score: {weightedScore}%
+            </Badge>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={kpiChartData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" interval={0} angle={-20} textAnchor="end" height={80} />
+                  <YAxis domain={[0, 120]} tickFormatter={(value) => `${value}%`} />
+                  <Tooltip
+                    formatter={(value: number, _name, payload) => {
+                      const { target, value: current, unit } = payload?.payload || {};
+                      return [
+                        `${formatPercent(value as number)} | ${current} ${unit}`,
+                        "Progress",
+                      ];
+                    }}
+                    labelFormatter={(label) => label}
+                  />
+                  <Bar dataKey="progress" radius={[4, 4, 0, 0]} fill="#2563eb" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="space-y-3">
+              {kpiChartData.map((kpi) => {
+                const normalized = Math.min(kpi.progress, 100);
                 return (
-                  <Card
-                    key={idx}
-                    className="flex flex-col h-32 justify-between p-4 shadow-md"
-                  >
-                    <div className="flex justify-between items-center">
-                      <div className="font-semibold">{kpi.title}</div>
-                      <div className="text-xs text-gray-400">
-                        Weight: {kpi.weight}%
-                      </div>
+                  <div key={kpi.name} className="p-3 border rounded-lg space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-semibold">{kpi.name}</span>
+                      <span className="text-muted-foreground">Weight {kpi.weight}%</span>
                     </div>
-                    <div className="mt-2 text-2xl font-bold flex items-end">
-                      {formatNumber(kpi.achieved)}
-                      {kpi.unit && (
-                        <span className="ml-1 text-base font-normal">
-                          {kpi.unit}
-                        </span>
-                      )}
-                      <span className="ml-2 text-xs text-gray-400 font-normal">
-                        / {formatNumber(kpi.target)}
-                      </span>
+                    <div className="text-xs text-muted-foreground">
+                      {kpi.value} / {kpi.target} {kpi.unit}
                     </div>
-                    <div className="mt-2">
-                      <ProgressBar value={percent} />
-                      <div className="text-xs text-gray-500 mt-1">
-                        {percent.toFixed(1)}%
-                      </div>
+                    <div className="h-2 bg-muted rounded">
+                      <div
+                        className="h-2 rounded bg-primary"
+                        style={{ width: `${normalized}%` }}
+                      />
                     </div>
-                  </Card>
+                    <div className="text-xs font-semibold">{formatPercent(normalized)}</div>
+                  </div>
                 );
               })}
-        </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </Layout>
   );
