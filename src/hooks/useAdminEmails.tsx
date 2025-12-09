@@ -1,25 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { demoStore } from "@/lib/demoStore";
 import { useToast } from "@/hooks/use-toast";
-
-export interface AdminEmail {
-  id: string;
-  email: string;
-  created_at: string;
-}
 
 export const useAdminEmails = () => {
   return useQuery({
     queryKey: ['admin-emails'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('admin_emails')
-        .select('*')
-        .order('email');
-      
-      if (error) throw error;
-      return data as AdminEmail[];
-    }
+    queryFn: async () => demoStore.getAdminEmails()
   });
 };
 
@@ -29,14 +15,7 @@ export const useAddAdminEmail = () => {
   
   return useMutation({
     mutationFn: async ({ email }: { email: string }) => {
-      const { data, error } = await supabase
-        .from('admin_emails')
-        .insert([{ email }])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+      return demoStore.addAdminEmail(email);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-emails'] });
